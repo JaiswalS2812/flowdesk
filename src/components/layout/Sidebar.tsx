@@ -49,13 +49,13 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Users',
     href: '/users',
     icon: <Users className="w-4 h-4" />,
-    roles: ['ADMIN', 'MANAGER'],
+    roles: ['ADMIN'],
   },
   {
     label: 'Activity',
     href: '/activity',
     icon: <Activity className="w-4 h-4" />,
-    roles: ['ADMIN', 'MANAGER'],
+    roles: ['ADMIN'],
   },
   {
     label: 'SLA Policies',

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { slaPolicyService } from '@/services/sla-policy.service';
-import { SlaPolicyResponse, UpdateSlaPolicyRequest } from '@/types';
+import { ApiError, SlaPolicyResponse, UpdateSlaPolicyRequest } from '@/types';
 import { PageHeader } from '@/components/layout/Sidebar';
 import {
   Card,
@@ -313,8 +313,12 @@ export default function SlaPoliciesPage() {
       setEditingId(null);
       success('SLA policy updated', `${updated.priority} priority policy has been saved.`);
     } catch (err: unknown) {
+      // API errors are plain objects ({ status, message, fields }), not Error instances
+      const apiErr = err as ApiError;
+      const details = apiErr.fields ? Object.values(apiErr.fields).join(' ') : '';
       const msg =
-        err instanceof Error ? err.message : 'Failed to update SLA policy. Please try again.';
+        [apiErr.message, details].filter(Boolean).join(': ') ||
+        'Failed to update SLA policy. Please try again.';
       error('Update failed', msg);
     } finally {
       setSavingId(null);

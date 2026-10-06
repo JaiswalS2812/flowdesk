@@ -25,7 +25,7 @@ import { formatDate } from '@/utils';
 import { Users, UserX, UserCheck, RefreshCw } from 'lucide-react';
 
 export default function UsersPage() {
-  useRequireAuth({ allowedRoles: ['ADMIN', 'MANAGER'] });
+  useRequireAuth({ allowedRoles: ['ADMIN'] });
 
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);

@@ -89,8 +89,9 @@ export async function request<T>(
   if (!response.ok) {
     const error = await parseError(response);
 
-    // Auto-redirect on 401
-    if (error.status === 401 && typeof window !== 'undefined') {
+    // Auto-redirect on 401, but only for requests that sent credentials:
+    // a failed login (auth: false) must stay on the page to show its error
+    if (error.status === 401 && auth && typeof window !== 'undefined') {
       removeToken();
       window.location.href = '/login';
     }

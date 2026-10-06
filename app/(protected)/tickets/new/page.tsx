@@ -5,12 +5,17 @@ import { useRouter } from 'next/navigation';
 import { ticketService } from '@/services/ticket.service';
 import { TicketPriority } from '@/types';
 import { ApiError } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/layout/Sidebar';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea, Select } from '@/components/ui/FormFields';
 import { useToast } from '@/components/ui/Toast';
 import { Ticket } from 'lucide-react';
+
+// Must match the backend limits on ticket creation
+const TITLE_MAX = 255;
+const DESCRIPTION_MAX = 16000;
 
 const PRIORITY_OPTIONS: { value: TicketPriority; label: string }[] = [
   { value: 'LOW', label: 'Low — General inquiry, no urgency' },
@@ -22,12 +27,12 @@ const PRIORITY_OPTIONS: { value: TicketPriority; label: string }[] = [
 export default function NewTicketPage() {
   const router = useRouter();
   const { success, error } = useToast();
+  const { user } = useAuth();
 
   const [form, setForm] = useState({
     title: '',
     description: '',
     priority: 'MEDIUM' as TicketPriority,
-    department: '',
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -36,7 +41,6 @@ export default function NewTicketPage() {
     const errs: Record<string, string> = {};
     if (!form.title.trim()) errs.title = 'Title is required.';
     if (!form.description.trim()) errs.description = 'Description is required.';
-    if (!form.department.trim()) errs.department = 'Department is required.';
     return errs;
   };
 
@@ -51,7 +55,6 @@ export default function NewTicketPage() {
         title: form.title.trim(),
         description: form.description.trim(),
         priority: form.priority,
-        department: form.department.trim(),
       });
       success('Ticket created!', `Ticket #${ticket.id} has been submitted.`);
       router.push(`/tickets/${ticket.id}`);
@@ -97,6 +100,7 @@ export default function NewTicketPage() {
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
               error={fieldErrors.title}
               disabled={isLoading}
+              maxLength={TITLE_MAX}
             />
 
             <Textarea
@@ -108,6 +112,8 @@ export default function NewTicketPage() {
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               error={fieldErrors.description}
               disabled={isLoading}
+              maxLength={DESCRIPTION_MAX}
+              hint={`${form.description.length.toLocaleString()} / ${DESCRIPTION_MAX.toLocaleString()} characters`}
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -121,15 +127,13 @@ export default function NewTicketPage() {
                 disabled={isLoading}
               />
 
+              {/* Read-only: the backend files the ticket under the creator's department */}
               <Input
                 label="Department"
-                placeholder="e.g. Engineering, HR, Finance"
-                required
-                value={form.department}
-                onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
-                error={fieldErrors.department}
-                disabled={isLoading}
-                hint="Which department should handle this?"
+                value={user?.department ?? ''}
+                readOnly
+                disabled
+                hint="Tickets are filed under your department"
               />
             </div>
 
