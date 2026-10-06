@@ -1,0 +1,25 @@
+# Build output and dependencies are recreated inside the image
+node_modules
+.next
+out
+build
+*.tsbuildinfo
+
+# Local configuration and secrets (BACKEND_API_URL is passed as a build argument)
+.env*
+
+# Tests, reports and tooling
+e2e
+test-results
+playwright-report
+playwright.config.ts
+coverage
+
+# Version control, editors, Docker files
+.git
+.gitignore
+.vscode
+.idea
+Dockerfile
+.dockerignore
+npm-debug.log*

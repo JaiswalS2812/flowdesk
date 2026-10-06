@@ -34,6 +34,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
 
+  // Self-contained server (.next/standalone) for the Docker image, which sets
+  // NEXT_OUTPUT_STANDALONE=1 at build time; regular builds keep working with `next start`
+  output: process.env.NEXT_OUTPUT_STANDALONE === "1" ? "standalone" : undefined,
+
   async headers() {
     return [
       {
@@ -44,6 +48,8 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // The destination is resolved during `next build` and stored in the server-side routes
+  // manifest, so BACKEND_API_URL must be set at build time (it is never sent to the browser).
   async rewrites() {
     return [
       {
