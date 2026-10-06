@@ -66,6 +66,11 @@ export interface TicketResponse {
   escalationLevel: SlaEscalationLevel;
 }
 
+export interface AdminUpdateUserRequest {
+  role: Role;
+  department: string;
+}
+
 // Department is not sent: the backend assigns the creator's department
 export interface CreateTicketRequest {
   title: string;

@@ -43,6 +43,7 @@ function getDefaultMessage(status: number): string {
     case 403: return 'You do not have permission to perform this action.';
     case 404: return 'The requested resource was not found.';
     case 409: return 'A conflict occurred. The resource may already exist.';
+    case 429: return 'Too many attempts. Please wait and try again.';
     default:  return 'An unexpected error occurred. Please try again.';
   }
 }

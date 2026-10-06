@@ -31,8 +31,11 @@ export default function RegisterPage() {
     if (!form.name || form.name.length < 2) errs.name = 'Name must be at least 2 characters.';
     if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
       errs.email = 'Enter a valid email address.';
-    if (!form.password || form.password.length < 8)
-      errs.password = 'Password must be at least 8 characters.';
+    // Mirrors the backend policy; the backend also rejects common passwords and the email name
+    if (!form.password || form.password.length < 10 || form.password.length > 100)
+      errs.password = 'Password must be between 10 and 100 characters.';
+    else if (!/[A-Za-z]/.test(form.password) || !/[0-9]/.test(form.password))
+      errs.password = 'Password must contain at least one letter and one number.';
     if (!form.department || form.department.length < 2)
       errs.department = 'Department must be at least 2 characters.';
     return errs;
@@ -151,7 +154,7 @@ export default function RegisterPage() {
                 }
                 error={fieldErrors.password}
                 disabled={isLoading}
-                hint="Must be at least 8 characters"
+                hint="At least 10 characters, with a letter and a number"
                 rightAddon={
                   <button
                     type="button"

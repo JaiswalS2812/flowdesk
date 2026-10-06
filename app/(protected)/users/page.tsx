@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { Fragment, useEffect, useState, useCallback } from 'react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { userService } from '@/services/user.service';
-import { ApiError, UserResponse } from '@/types';
+import { ApiError, Role, UserResponse } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/layout/Sidebar';
 import {
@@ -20,9 +20,15 @@ import {
 } from '@/components/ui/Card';
 import { RoleBadge } from '@/components/tickets/Badges';
 import { Button } from '@/components/ui/Button';
+import { Input, Select } from '@/components/ui/FormFields';
 import { useToast } from '@/components/ui/Toast';
-import { formatDate } from '@/utils';
-import { Users, UserX, UserCheck, RefreshCw } from 'lucide-react';
+import { formatDate, ROLE_LABELS } from '@/utils';
+import { Users, UserX, UserCheck, RefreshCw, Pencil } from 'lucide-react';
+
+const ROLE_OPTIONS = (Object.keys(ROLE_LABELS) as Role[]).map((role) => ({
+  value: role,
+  label: ROLE_LABELS[role],
+}));
 
 export default function UsersPage() {
   useRequireAuth({ allowedRoles: ['ADMIN'] });
@@ -30,6 +36,10 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editRole, setEditRole] = useState<Role>('EMPLOYEE');
+  const [editDepartment, setEditDepartment] = useState('');
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const { success, error } = useToast();
   const { user: currentUser } = useAuth();
 
@@ -107,6 +117,40 @@ export default function UsersPage() {
     }
   };
 
+  const startEdit = (target: UserResponse) => {
+    setEditingId(target.id);
+    setEditRole(target.role);
+    setEditDepartment(target.department);
+    setEditErrors({});
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditErrors({});
+  };
+
+  // Role and department changes; the backend enforces admin-only access and the
+  // self / last-admin / open-ticket rules, and notifies the user
+  const handleSaveEdit = async (target: UserResponse) => {
+    const department = editDepartment.trim();
+    if (department.length < 2 || department.length > 100) {
+      setEditErrors({ department: 'Department must be between 2 and 100 characters.' });
+      return;
+    }
+    setUpdatingId(target.id);
+    try {
+      replaceUser(await userService.update(target.id, { role: editRole, department }));
+      setEditingId(null);
+      success('User updated', `${target.name} is now ${ROLE_LABELS[editRole]} in ${department}.`);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      if (apiErr.fields) setEditErrors(apiErr.fields);
+      else error('Could not update user', apiErr.message);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const activeCount = users.filter((u) => u.active).length;
 
   return (
@@ -160,7 +204,8 @@ export default function UsersPage() {
               </TableHead>
               <TableBody>
                 {users.map((user) => (
-                  <Tr key={user.id} className={user.active ? undefined : 'opacity-60'}>
+                  <Fragment key={user.id}>
+                  <Tr className={user.active ? undefined : 'opacity-60'}>
                     <Td>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-semibold shrink-0">
@@ -191,9 +236,20 @@ export default function UsersPage() {
                     <Td className="hidden lg:table-cell text-slate-400 text-xs whitespace-nowrap">
                       {formatDate(user.createdAt)}
                     </Td>
-                    <Td className="text-right">
+                    <Td className="text-right whitespace-nowrap">
+                      {user.active && editingId !== user.id && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => startEdit(user)}
+                          disabled={updatingId === user.id}
+                          leftIcon={<Pencil className="w-3.5 h-3.5" />}
+                        >
+                          Edit
+                        </Button>
+                      )}
                       {user.id === currentUser?.id ? (
-                        <span className="text-xs text-slate-400">You</span>
+                        <span className="text-xs text-slate-400 ml-2">You</span>
                       ) : user.active ? (
                         <Button
                           variant="ghost"
@@ -218,6 +274,53 @@ export default function UsersPage() {
                       )}
                     </Td>
                   </Tr>
+                  {editingId === user.id && (
+                    <tr className="bg-slate-50/70 border-b border-slate-100">
+                      <td colSpan={7} className="px-4 py-4">
+                        <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                          <div className="sm:w-56">
+                            <Select
+                              label="Role"
+                              value={editRole}
+                              onChange={(e) => setEditRole(e.target.value as Role)}
+                              options={ROLE_OPTIONS}
+                              error={editErrors.role}
+                              disabled={user.id === currentUser?.id || updatingId === user.id}
+                              hint={user.id === currentUser?.id ? 'You cannot change your own role' : undefined}
+                            />
+                          </div>
+                          <div className="sm:w-64">
+                            <Input
+                              label="Department"
+                              value={editDepartment}
+                              onChange={(e) => setEditDepartment(e.target.value)}
+                              maxLength={100}
+                              error={editErrors.department}
+                              disabled={updatingId === user.id}
+                            />
+                          </div>
+                          <div className="flex gap-2 sm:pt-6">
+                            <Button
+                              size="sm"
+                              onClick={() => handleSaveEdit(user)}
+                              isLoading={updatingId === user.id}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={cancelEdit}
+                              disabled={updatingId === user.id}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
