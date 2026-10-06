@@ -29,6 +29,9 @@ const securityHeaders = [
     value: "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()",
   },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // HTTPS-only from the first page load (same value the backend sends on /api responses).
+  // TLS is terminated by the hosting edge; browsers ignore this header over plain HTTP.
+  { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];
 
 const nextConfig: NextConfig = {

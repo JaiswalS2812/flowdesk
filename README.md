@@ -23,6 +23,18 @@ the address of each incoming connection, like a standard reverse proxy, so a cli
 choose the IP the backend sees. Run the production server through `npm start`, not plain
 `next start`.
 
+Behind a platform edge proxy that every request must pass through, set `CLIENT_IP_HEADER` to
+the header that edge always overwrites with the client IP (`x-real-ip` on Railway). The
+preload then uses that header as `X-Forwarded-For` instead of the connection address, which
+would be the edge's. Leave it unset when clients connect directly (Docker Compose).
+
+## Production (Railway)
+
+Deployed as the `frontend` service of the Railway project described in the backend README
+(public domain, port 3000, health check `/login`), with `BACKEND_API_URL` pointing to the
+backend's private domain (`http://backend.railway.internal:8080`) and
+`CLIENT_IP_HEADER=x-real-ip`. Deploy with `railway up --service frontend`.
+
 ## Local development
 
 ```bash
@@ -56,7 +68,8 @@ are not part of the runtime image.
 ## Security headers
 
 `next.config.ts` sends a Content-Security-Policy and other security headers on every page.
-`Strict-Transport-Security` must be added by the TLS-terminating proxy in front of the app.
+It includes `Strict-Transport-Security` (ignored by browsers over plain HTTP); TLS itself is
+terminated by the hosting edge (Railway in production).
 
 ## End-to-end tests
 
