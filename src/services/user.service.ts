@@ -14,7 +14,11 @@ export const userService = {
     return request<UserResponse>(`/api/users/${id}`);
   },
 
-  delete(id: number): Promise<void> {
-    return request<void>(`/api/users/${id}`, { method: 'DELETE' });
+  deactivate(id: number): Promise<UserResponse> {
+    return request<UserResponse>(`/api/users/${id}/deactivate`, { method: 'PATCH' });
+  },
+
+  reactivate(id: number): Promise<UserResponse> {
+    return request<UserResponse>(`/api/users/${id}/reactivate`, { method: 'PATCH' });
   },
 };

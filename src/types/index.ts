@@ -29,6 +29,8 @@ export interface UserResponse {
   role: Role;
   department: string;
   createdAt: string; // ISO datetime string from backend
+  active: boolean;
+  deactivatedAt: string | null;
 }
 
 export interface LoginResponse {

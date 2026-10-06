@@ -3,9 +3,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { userService } from '@/services/user.service';
-import { UserResponse } from '@/types';
+import { ApiError, UserResponse } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/layout/Sidebar';
 import {
+  Badge,
   Card,
   EmptyState,
   Skeleton,
@@ -20,15 +22,16 @@ import { RoleBadge } from '@/components/tickets/Badges';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { formatDate } from '@/utils';
-import { Users, Trash2, RefreshCw } from 'lucide-react';
+import { Users, UserX, UserCheck, RefreshCw } from 'lucide-react';
 
 export default function UsersPage() {
   useRequireAuth({ allowedRoles: ['ADMIN', 'MANAGER'] });
 
   const [users, setUsers] = useState<UserResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
   const { success, error } = useToast();
+  const { user: currentUser } = useAuth();
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
@@ -69,26 +72,48 @@ export default function UsersPage() {
     };
   }, [error]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.'))
+  const replaceUser = (updated: UserResponse) =>
+    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+
+  // Users are deactivated, never deleted: their tickets and history stay intact
+  const handleDeactivate = async (target: UserResponse) => {
+    if (
+      !confirm(
+        `Deactivate ${target.name}? They will be signed out and unable to log in. ` +
+          'Their tickets, comments and history are kept, and they can be reactivated later.'
+      )
+    )
       return;
-    setDeletingId(id);
+    setUpdatingId(target.id);
     try {
-      await userService.delete(id);
-      setUsers((prev) => prev.filter((u) => u.id !== id));
-      success('User deleted', 'The user account has been removed.');
-    } catch {
-      error('Error', 'Could not delete user. They may have active tickets.');
+      replaceUser(await userService.deactivate(target.id));
+      success('User deactivated', `${target.name} can no longer sign in.`);
+    } catch (err) {
+      error('Could not deactivate user', (err as ApiError).message);
     } finally {
-      setDeletingId(null);
+      setUpdatingId(null);
     }
   };
+
+  const handleReactivate = async (target: UserResponse) => {
+    setUpdatingId(target.id);
+    try {
+      replaceUser(await userService.reactivate(target.id));
+      success('User reactivated', `${target.name} can sign in again.`);
+    } catch (err) {
+      error('Could not reactivate user', (err as ApiError).message);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const activeCount = users.filter((u) => u.active).length;
 
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="User Management"
-        subtitle={`${users.length} registered user${users.length !== 1 ? 's' : ''}`}
+        subtitle={`${users.length} registered user${users.length !== 1 ? 's' : ''} · ${activeCount} active`}
         breadcrumb={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Users' },
@@ -127,6 +152,7 @@ export default function UsersPage() {
                   <Th>Name</Th>
                   <Th>Email</Th>
                   <Th>Role</Th>
+                  <Th>Status</Th>
                   <Th className="hidden md:table-cell">Department</Th>
                   <Th className="hidden lg:table-cell">Joined</Th>
                   <Th className="text-right">Actions</Th>
@@ -134,7 +160,7 @@ export default function UsersPage() {
               </TableHead>
               <TableBody>
                 {users.map((user) => (
-                  <Tr key={user.id}>
+                  <Tr key={user.id} className={user.active ? undefined : 'opacity-60'}>
                     <Td>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-semibold shrink-0">
@@ -145,6 +171,20 @@ export default function UsersPage() {
                     </Td>
                     <Td className="text-slate-500 text-xs">{user.email}</Td>
                     <Td><RoleBadge role={user.role} /></Td>
+                    <Td>
+                      {user.active ? (
+                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200" dot>
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge
+                          className="bg-slate-100 text-slate-500 border-slate-200"
+                          dot
+                        >
+                          Deactivated
+                        </Badge>
+                      )}
+                    </Td>
                     <Td className="hidden md:table-cell text-slate-500 text-xs">
                       {user.department}
                     </Td>
@@ -152,16 +192,30 @@ export default function UsersPage() {
                       {formatDate(user.createdAt)}
                     </Td>
                     <Td className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(user.id)}
-                        isLoading={deletingId === user.id}
-                        leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                        className="text-red-500 hover:bg-red-50 hover:text-red-700"
-                      >
-                        Remove
-                      </Button>
+                      {user.id === currentUser?.id ? (
+                        <span className="text-xs text-slate-400">You</span>
+                      ) : user.active ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeactivate(user)}
+                          isLoading={updatingId === user.id}
+                          leftIcon={<UserX className="w-3.5 h-3.5" />}
+                          className="text-red-500 hover:bg-red-50 hover:text-red-700"
+                        >
+                          Deactivate
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReactivate(user)}
+                          isLoading={updatingId === user.id}
+                          leftIcon={<UserCheck className="w-3.5 h-3.5" />}
+                        >
+                          Reactivate
+                        </Button>
+                      )}
                     </Td>
                   </Tr>
                 ))}
