@@ -75,6 +75,9 @@ const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
   },
 };
 
+const PAGE_SIZE = 20;
+const POLL_INTERVAL_MS = 60_000;
+
 const DEFAULT_CONFIG: TypeConfig = {
   icon: Bell,
   color: 'text-slate-600',
@@ -89,37 +92,49 @@ export function NotificationBell() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [nextPage, setNextPage] = useState<number | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Initial load of unread count
+  // Unread count on load, then every minute while the tab is visible
   useEffect(() => {
     let mounted = true;
-    notificationService
-      .getUnreadCount()
-      .then((res) => {
-        if (mounted) {
-          setUnreadCount(res.unreadCount);
-        }
-      })
-      .catch(() => {
-        // Silent catch for initial count load
-      });
+    const refreshCount = () => {
+      if (document.visibilityState !== 'visible') return;
+      notificationService
+        .getUnreadCount()
+        .then((res) => {
+          if (mounted) {
+            setUnreadCount(res.unreadCount);
+          }
+        })
+        .catch(() => {
+          // The badge simply keeps its last value
+        });
+    };
+
+    refreshCount();
+    const timer = setInterval(refreshCount, POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', refreshCount);
     return () => {
       mounted = false;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshCount);
     };
   }, []);
 
-  // Fetch full notification list and refresh unread count when opened
+  // The newest page of notifications and the unread count, when opened
   const loadNotifications = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [list, countRes] = await Promise.all([
-        notificationService.getAll(),
+      const [page, countRes] = await Promise.all([
+        notificationService.getPage({ size: PAGE_SIZE }),
         notificationService.getUnreadCount(),
       ]);
-      setNotifications(list);
+      setNotifications(page.content);
+      setNextPage(page.page + 1 < page.totalPages ? page.page + 1 : null);
       setUnreadCount(countRes.unreadCount);
     } catch {
       setError('Unable to load notifications');
@@ -127,6 +142,24 @@ export function NotificationBell() {
       setIsLoading(false);
     }
   }, []);
+
+  const loadOlder = async () => {
+    if (nextPage === null || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const page = await notificationService.getPage({ page: nextPage, size: PAGE_SIZE });
+      // New notifications may have shifted the pages; skip any already shown
+      setNotifications((prev) => {
+        const seen = new Set(prev.map((n) => n.id));
+        return [...prev, ...page.content.filter((n) => !seen.has(n.id))];
+      });
+      setNextPage(page.page + 1 < page.totalPages ? page.page + 1 : null);
+    } catch {
+      // The button stays so the user can try again
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   // Popover toggle
   const toggleDropdown = () => {
@@ -363,6 +396,17 @@ export function NotificationBell() {
                   </button>
                 );
               })
+            )}
+            {!isLoading && !error && nextPage !== null && (
+              <button
+                type="button"
+                onClick={loadOlder}
+                disabled={isLoadingMore}
+                className="w-full py-2.5 text-xs font-medium text-brand-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isLoadingMore && <Loader2 className="w-3 h-3 animate-spin" />}
+                Load older notifications
+              </button>
             )}
           </div>
         </div>

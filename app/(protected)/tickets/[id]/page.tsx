@@ -56,6 +56,22 @@ const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
+// Same transitions the backend accepts; the current status is listed first
+const NEXT_STATUSES: Record<TicketStatus, TicketStatus[]> = {
+  OPEN: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['RESOLVED', 'CANCELLED'],
+  RESOLVED: ['CLOSED'],
+  CLOSED: [],
+  CANCELLED: [],
+};
+
+function statusOptionsFor(current: TicketStatus) {
+  const allowed = [current, ...NEXT_STATUSES[current]];
+  return STATUS_OPTIONS.filter((o) => allowed.includes(o.value)).sort(
+    (a, b) => allowed.indexOf(a.value) - allowed.indexOf(b.value)
+  );
+}
+
 // ─── Detail field helper ──────────────────────────────────────────────────────
 
 function DetailRow({
@@ -597,15 +613,21 @@ export default function TicketDetailPage() {
             <Card>
               <CardHeader title="Update Status" />
 
+              {NEXT_STATUSES[ticket.status].length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  This ticket is {ticket.status === 'CLOSED' ? 'closed' : 'cancelled'}; its status can no longer change.
+                </p>
+              ) : (
               <div className="space-y-3">
                 <Select
+                  aria-label="New status"
                   value={newStatus}
                   onChange={(e) =>
                     setNewStatus(
                       e.target.value as TicketStatus
                     )
                   }
-                  options={STATUS_OPTIONS}
+                  options={statusOptionsFor(ticket.status)}
                   disabled={isUpdatingStatus}
                 />
 
@@ -620,6 +642,7 @@ export default function TicketDetailPage() {
                   Update Status
                 </Button>
               </div>
+              )}
             </Card>
           )}
 
@@ -636,6 +659,7 @@ export default function TicketDetailPage() {
                 {users.length > 0 ? (
                   <>
                     <Select
+                      aria-label="Support engineer"
                       value={assignTo}
                       onChange={(e) =>
                         setAssignTo(e.target.value)

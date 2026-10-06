@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { activityService } from '@/services/activity.service';
-import { AuditLogResponse } from '@/types';
+import { ActivitySummary, AuditLogResponse, PageResponse } from '@/types';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { PageHeader } from '@/components/layout/Sidebar';
 import {
   Card,
@@ -139,94 +140,61 @@ function ActionBadge({ action }: { action: string }) {
 export default function ActivityPage() {
   useRequireAuth({ allowedRoles: ['ADMIN'] });
 
-  const [logs, setLogs] = useState<AuditLogResponse[]>([]);
+  const [result, setResult] = useState<PageResponse<AuditLogResponse> | null>(null);
+  const [metrics, setMetrics] = useState<ActivitySummary>({
+    total: 0,
+    slaBreaches: 0,
+    statusChanges: 0,
+    assignments: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
+  const debouncedSearch = useDebouncedValue(search.trim());
   const { error } = useToast();
 
-  const fetchLogs = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await activityService.getAll();
-      setLogs(data);
-    } catch {
-      error('Failed to load activity log', 'Please check your connection and try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [error]);
-
+  // Search, filtering and paging happen on the server; the cards count every event
   useEffect(() => {
     let cancelled = false;
 
-    const load = async () => {
-      try {
-        const data = await activityService.getAll();
-        if (!cancelled) {
-          setLogs(data);
+    Promise.all([
+      activityService.getPage({
+        page: currentPage - 1,
+        size: PAGE_SIZE,
+        action: actionFilter === 'ALL' ? undefined : actionFilter,
+        search: debouncedSearch || undefined,
+      }),
+      activityService.getSummary(),
+    ])
+      .then(([page, summary]) => {
+        if (cancelled) return;
+        if (page.content.length === 0 && page.page > 0 && page.totalPages > 0) {
+          setCurrentPage(page.totalPages);
+          return;
         }
-      } catch {
+        setResult(page);
+        setMetrics(summary);
+      })
+      .catch(() => {
         if (!cancelled) {
           error('Failed to load activity log', 'Please check your connection and try again.');
         }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void load();
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [error]);
+  }, [currentPage, actionFilter, debouncedSearch, reloadKey, error]);
 
-  // Summary Metrics
-  const metrics = useMemo(() => {
-    const total = logs.length;
-    const slaBreaches = logs.filter((l) => l.action === 'SLA_BREACHED').length;
-    const statusChanges = logs.filter((l) => l.action === 'TICKET_STATUS_UPDATED').length;
-    const assignments = logs.filter((l) => l.action === 'TICKET_ASSIGNED').length;
-    return { total, slaBreaches, statusChanges, assignments };
-  }, [logs]);
-
-// Filtering
-const filteredLogs = useMemo(() => {
-  return logs.filter((log) => {
-    if (actionFilter !== 'ALL' && log.action !== actionFilter) {
-      return false;
-    }
-
-    if (search.trim()) {
-      const query = search.trim().toLowerCase();
-
-      const searchableText = [
-        log.action,
-        log.action.replace(/_/g, ' '),
-        log.entityType,
-        log.entityId?.toString(),
-        `${log.entityType} #${log.entityId}`,
-        log.performedBy,
-        log.details,
-        formatRelative(log.createdAt),
-        formatDate(log.createdAt),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-
-      if (!searchableText.includes(query)) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-}, [logs, search, actionFilter]);
+  const fetchLogs = useCallback(() => {
+    setIsLoading(true);
+    setReloadKey((k) => k + 1);
+  }, []);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -244,12 +212,10 @@ const filteredLogs = useMemo(() => {
     setCurrentPage(1);
   };
 
-  const totalPages = Math.ceil(filteredLogs.length / PAGE_SIZE) || 1;
-  const safePage = Math.min(Math.max(1, currentPage), totalPages);
-  const paginatedLogs = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE;
-    return filteredLogs.slice(start, start + PAGE_SIZE);
-  }, [filteredLogs, safePage]);
+  const paginatedLogs = result?.content ?? [];
+  const totalEvents = result?.totalElements ?? 0;
+  const totalPages = Math.max(result?.totalPages ?? 1, 1);
+  const safePage = (result?.page ?? 0) + 1;
 
   return (
     <div className="animate-fade-in pb-12">
@@ -323,6 +289,7 @@ const filteredLogs = useMemo(() => {
             <div className="flex-1 w-full">
               <Input
                 placeholder="Search by ticket #, user email, or details..."
+                aria-label="Search activity"
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 leftAddon={<Search className="w-4 h-4" />}
@@ -331,6 +298,7 @@ const filteredLogs = useMemo(() => {
             <div className="w-full sm:w-64">
               <Select
                 options={ACTION_FILTER_OPTIONS}
+                aria-label="Filter by action"
                 value={actionFilter}
                 onChange={(e) => handleActionFilterChange(e.target.value)}
               />
@@ -349,13 +317,13 @@ const filteredLogs = useMemo(() => {
 
         {/* Audit Log Table */}
         <Card padding="none">
-          {isLoading ? (
+          {isLoading && !result ? (
             <div className="p-6 space-y-3">
               {[...Array(6)].map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : filteredLogs.length === 0 ? (
+          ) : paginatedLogs.length === 0 ? (
             <EmptyState
               icon={<Activity className="w-6 h-6" />}
               title="No activity events found"
@@ -457,11 +425,11 @@ const filteredLogs = useMemo(() => {
                   </span>{' '}
                   to{' '}
                   <span className="font-medium text-slate-900">
-                    {Math.min(safePage * PAGE_SIZE, filteredLogs.length)}
+                    {Math.min(safePage * PAGE_SIZE, totalEvents)}
                   </span>{' '}
                   of{' '}
                   <span className="font-medium text-slate-900">
-                    {filteredLogs.length}
+                    {totalEvents}
                   </span>{' '}
                   events
                 </p>
@@ -472,7 +440,7 @@ const filteredLogs = useMemo(() => {
                       variant="secondary"
                       size="sm"
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={safePage === 1}
+                      disabled={safePage === 1 || isLoading}
                       leftIcon={<ChevronLeft className="w-4 h-4" />}
                     >
                       Previous
@@ -484,7 +452,7 @@ const filteredLogs = useMemo(() => {
                       variant="secondary"
                       size="sm"
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={safePage === totalPages}
+                      disabled={safePage === totalPages || isLoading}
                       rightIcon={<ChevronRight className="w-4 h-4" />}
                     >
                       Next

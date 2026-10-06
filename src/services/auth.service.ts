@@ -1,5 +1,6 @@
 import { request } from '@/lib/api-client';
 import {
+  ChangePasswordRequest,
   LoginRequest,
   LoginResponse,
   RegisterRequest,
@@ -20,6 +21,19 @@ export const authService = {
       method: 'POST',
       body: data,
       auth: false,
+    });
+  },
+
+  // The signed-in user's current role and department
+  me(): Promise<UserResponse> {
+    return request<UserResponse>('/api/auth/me');
+  },
+
+  // Signs out every existing session, including this one
+  changePassword(data: ChangePasswordRequest): Promise<void> {
+    return request<void>('/api/auth/change-password', {
+      method: 'POST',
+      body: data,
     });
   },
 };

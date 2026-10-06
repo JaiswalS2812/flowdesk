@@ -3,7 +3,9 @@
 import React, { Fragment, useEffect, useState, useCallback } from 'react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { userService } from '@/services/user.service';
-import { ApiError, Role, UserResponse } from '@/types';
+import { ApiError, PageResponse, Role, UserResponse } from '@/types';
+import { Pagination } from '@/components/ui/Pagination';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/layout/Sidebar';
 import {
@@ -23,67 +25,93 @@ import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/FormFields';
 import { useToast } from '@/components/ui/Toast';
 import { formatDate, ROLE_LABELS } from '@/utils';
-import { Users, UserX, UserCheck, RefreshCw, Pencil } from 'lucide-react';
+import { Users, UserX, UserCheck, RefreshCw, Pencil, Search } from 'lucide-react';
 
 const ROLE_OPTIONS = (Object.keys(ROLE_LABELS) as Role[]).map((role) => ({
   value: role,
   label: ROLE_LABELS[role],
 }));
 
+const PAGE_SIZE = 20;
+
+const STATUS_OPTIONS = [
+  { value: 'ALL', label: 'All users' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Deactivated' },
+];
+
+type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+
 export default function UsersPage() {
   useRequireAuth({ allowedRoles: ['ADMIN'] });
 
-  const [users, setUsers] = useState<UserResponse[]>([]);
+  const [result, setResult] = useState<PageResponse<UserResponse> | null>(null);
+  const [counts, setCounts] = useState({ total: 0, active: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editRole, setEditRole] = useState<Role>('EMPLOYEE');
   const [editDepartment, setEditDepartment] = useState('');
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [page, setPage] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  const debouncedSearch = useDebouncedValue(search.trim());
   const { success, error } = useToast();
   const { user: currentUser } = useAuth();
 
-  const fetchUsers = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await userService.getAll();
-      setUsers(data);
-    } catch {
-      error('Error', 'Could not load users. Please refresh.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [error]);
-
+  // Search, filtering and paging happen on the server (sorted by name)
   useEffect(() => {
     let cancelled = false;
 
-    const loadUsers = async () => {
-      try {
-        const data = await userService.getAll();
-        if (!cancelled) {
-          setUsers(data);
+    Promise.all([
+      userService.getPage({
+        page,
+        size: PAGE_SIZE,
+        search: debouncedSearch || undefined,
+        active: statusFilter === 'ALL' ? undefined : statusFilter === 'ACTIVE',
+      }),
+      userService.getPage({ size: 1 }),
+      userService.getPage({ size: 1, active: true }),
+    ])
+      .then(([data, all, active]) => {
+        if (cancelled) return;
+        if (data.content.length === 0 && data.page > 0 && data.totalPages > 0) {
+          setPage(data.totalPages - 1);
+          return;
         }
-      } catch {
-        if (!cancelled) {
-          error('Error', 'Could not load users. Please refresh.');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadUsers();
+        setResult(data);
+        setCounts({ total: all.totalElements, active: active.totalElements });
+      })
+      .catch(() => {
+        if (!cancelled) error('Error', 'Could not load users. Please refresh.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [error]);
+  }, [page, debouncedSearch, statusFilter, reloadKey, error]);
 
-  const replaceUser = (updated: UserResponse) =>
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+  const fetchUsers = useCallback(() => {
+    setIsLoading(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  const users = result?.content ?? [];
+
+  // Update the row in place, then refresh the counts (and the filtered list) from the server
+  const replaceUser = (updated: UserResponse) => {
+    setResult((prev) =>
+      prev
+        ? { ...prev, content: prev.content.map((u) => (u.id === updated.id ? updated : u)) }
+        : prev
+    );
+    setReloadKey((k) => k + 1);
+  };
 
   // Users are deactivated, never deleted: their tickets and history stay intact
   const handleDeactivate = async (target: UserResponse) => {
@@ -151,13 +179,11 @@ export default function UsersPage() {
     }
   };
 
-  const activeCount = users.filter((u) => u.active).length;
-
   return (
     <div className="animate-fade-in">
       <PageHeader
         title="User Management"
-        subtitle={`${users.length} registered user${users.length !== 1 ? 's' : ''} · ${activeCount} active`}
+        subtitle={`${counts.total} registered user${counts.total !== 1 ? 's' : ''} · ${counts.active} active`}
         breadcrumb={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'Users' },
@@ -175,9 +201,37 @@ export default function UsersPage() {
         }
       />
 
-      <div className="px-6 lg:px-8 py-6">
+      <div className="px-6 lg:px-8 py-6 space-y-4">
+        <Card padding="sm">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1">
+              <Input
+                placeholder="Search by name or email..."
+                aria-label="Search users"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(0);
+                }}
+                leftAddon={<Search className="w-4 h-4" />}
+              />
+            </div>
+            <div className="sm:w-48">
+              <Select
+                aria-label="Filter by status"
+                options={STATUS_OPTIONS}
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as StatusFilter);
+                  setPage(0);
+                }}
+              />
+            </div>
+          </div>
+        </Card>
+
         <Card padding="none">
-          {isLoading ? (
+          {isLoading && !result ? (
             <div className="p-6 space-y-3">
               {[...Array(5)].map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
@@ -187,9 +241,14 @@ export default function UsersPage() {
             <EmptyState
               icon={<Users className="w-6 h-6" />}
               title="No users found"
-              description="Users will appear here after they register."
+              description={
+                debouncedSearch || statusFilter !== 'ALL'
+                  ? 'No users match your search or filter.'
+                  : 'Users will appear here after they register.'
+              }
             />
           ) : (
+            <>
             <Table>
               <TableHead>
                 <Tr>
@@ -324,6 +383,18 @@ export default function UsersPage() {
                 ))}
               </TableBody>
             </Table>
+            {result && (
+              <Pagination
+                page={result.page}
+                totalPages={result.totalPages}
+                totalElements={result.totalElements}
+                size={result.size}
+                itemLabel="users"
+                onPageChange={setPage}
+                disabled={isLoading}
+              />
+            )}
+            </>
           )}
         </Card>
       </div>

@@ -174,3 +174,53 @@ export interface NotificationResponse {
 }
 
 
+
+// ─── Paging and summaries ───────────────────────────────────────────────────
+
+export interface PageResponse<T> {
+  content: T[];
+  page: number;       // zero-based
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface PageQuery {
+  page?: number;
+  size?: number;
+}
+
+export type TicketSortKey = 'id' | 'title' | 'status' | 'priority' | 'department' | 'createdAt' | 'updatedAt';
+
+export interface TicketQuery extends PageQuery {
+  status?: TicketStatus;
+  priority?: TicketPriority;
+  search?: string;
+  atRisk?: boolean;
+  sort?: TicketSortKey;
+  direction?: 'asc' | 'desc';
+}
+
+export interface TicketSummary {
+  total: number;
+  open: number;
+  inProgress: number;
+  resolved: number;
+  closed: number;
+  cancelled: number;
+  breached: number;
+  atRisk: number;
+  byPriority: Record<TicketPriority, number>;
+}
+
+export interface ActivitySummary {
+  total: number;
+  slaBreaches: number;
+  statusChanges: number;
+  assignments: number;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}

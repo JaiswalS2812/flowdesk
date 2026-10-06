@@ -1,5 +1,9 @@
 import { request } from '@/lib/api-client';
+import { toQuery } from '@/lib/query';
 import {
+  PageResponse,
+  TicketQuery,
+  TicketSummary,
   TicketResponse,
   CreateTicketRequest,
   AssignTicketRequest,
@@ -12,8 +16,13 @@ import {
 export const ticketService = {
   // ─── Tickets ──────────────────────────────────────────────────────────────
 
-  getAll(): Promise<TicketResponse[]> {
-    return request<TicketResponse[]>('/api/tickets');
+  // Only the tickets the signed-in user may see; filtered, sorted and paged by the server
+  getPage(query: TicketQuery = {}): Promise<PageResponse<TicketResponse>> {
+    return request<PageResponse<TicketResponse>>(`/api/tickets${toQuery(query)}`);
+  },
+
+  getSummary(): Promise<TicketSummary> {
+    return request<TicketSummary>('/api/tickets/summary');
   },
 
   getById(id: number): Promise<TicketResponse> {

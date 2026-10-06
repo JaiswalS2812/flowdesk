@@ -1,9 +1,16 @@
 import { request } from '@/lib/api-client';
-import { AdminUpdateUserRequest, UserResponse } from '@/types';
+import { toQuery } from '@/lib/query';
+import { AdminUpdateUserRequest, PageQuery, PageResponse, UserResponse } from '@/types';
+
+export interface UserQuery extends PageQuery {
+  search?: string;
+  active?: boolean;
+}
 
 export const userService = {
-  getAll(): Promise<UserResponse[]> {
-    return request<UserResponse[]>('/api/users');
+  // Sorted by name
+  getPage(query: UserQuery = {}): Promise<PageResponse<UserResponse>> {
+    return request<PageResponse<UserResponse>>(`/api/users${toQuery(query)}`);
   },
 
   getSupportEngineers(): Promise<UserResponse[]> {

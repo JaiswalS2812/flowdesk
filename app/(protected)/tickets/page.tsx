@@ -2,9 +2,15 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { ticketService } from "@/services/ticket.service";
-import { TicketResponse, TicketStatus, TicketPriority } from "@/types";
+import {
+  PageResponse,
+  TicketResponse,
+  TicketStatus,
+  TicketPriority,
+} from "@/types";
 import { PageHeader } from "@/components/layout/Sidebar";
 import {
   Card,
@@ -18,6 +24,8 @@ import {
 } from "@/components/tickets/Badges";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/FormFields";
+import { Pagination } from "@/components/ui/Pagination";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatRelative, cn } from "@/utils";
 import {
   Plus,
@@ -30,6 +38,8 @@ import {
 
 type SortKey = "id" | "title" | "status" | "priority" | "createdAt";
 type SortDir = "asc" | "desc";
+
+const PAGE_SIZE = 20;
 
 const STATUS_FILTER_OPTIONS: { label: string; value: TicketStatus | "ALL" }[] =
   [
@@ -71,8 +81,12 @@ function SortIcon({
 
 export default function TicketsPage() {
   const { user } = useAuth();
-  const [tickets, setTickets] = useState<TicketResponse[]>([]);
+  const router = useRouter();
+  const [result, setResult] = useState<PageResponse<TicketResponse> | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "ALL">("ALL");
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "ALL">(
@@ -80,39 +94,55 @@ export default function TicketsPage() {
   );
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [page, setPage] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  const debouncedSearch = useDebouncedValue(search.trim());
 
-const fetchTickets = useCallback(async () => {
-  try {
-    const data = await ticketService.getAll();
-    setTickets(data);
-  } finally {
-    setIsLoading(false);
-  }
-}, []);
+  // Filtering, sorting and paging happen on the server
+  useEffect(() => {
+    let cancelled = false;
 
-useEffect(() => {
-  let cancelled = false;
+    ticketService
+      .getPage({
+        page,
+        size: PAGE_SIZE,
+        sort: sortKey,
+        direction: sortDir,
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+        priority: priorityFilter === "ALL" ? undefined : priorityFilter,
+        search: debouncedSearch || undefined,
+      })
+      .then((data) => {
+        if (cancelled) return;
+        // A page past the end (the list shrank) falls back to the last page
+        if (data.content.length === 0 && data.page > 0 && data.totalPages > 0) {
+          setPage(data.totalPages - 1);
+          return;
+        }
+        setResult(data);
+        setLoadError(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
-  const loadTickets = async () => {
-    try {
-      const data = await ticketService.getAll();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, sortKey, sortDir, statusFilter, priorityFilter, debouncedSearch, reloadKey]);
 
-      if (!cancelled) {
-        setTickets(data);
-      }
-    } finally {
-      if (!cancelled) {
-        setIsLoading(false);
-      }
-    }
+  const refresh = useCallback(() => {
+    setIsLoading(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    setPage(0);
   };
-
-  void loadTickets();
-
-  return () => {
-    cancelled = true;
-  };
-}, []);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -120,34 +150,13 @@ useEffect(() => {
       setSortKey(key);
       setSortDir("desc");
     }
+    setPage(0);
   };
 
-  const filtered = tickets
-    .filter((t) => {
-      const q = search.toLowerCase();
-      if (
-        q &&
-        !t.title.toLowerCase().includes(q) &&
-        !String(t.id).includes(q) &&
-        !t.department.toLowerCase().includes(q)
-      )
-        return false;
-      if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
-      if (priorityFilter !== "ALL" && t.priority !== priorityFilter)
-        return false;
-      return true;
-    })
-    .sort((a, b) => {
-      let valA: string | number = a[sortKey] ?? "";
-      let valB: string | number = b[sortKey] ?? "";
-      if (sortKey === "createdAt") {
-        valA = new Date(a.createdAt).getTime();
-        valB = new Date(b.createdAt).getTime();
-      }
-      if (valA < valB) return sortDir === "asc" ? -1 : 1;
-      if (valA > valB) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
+  const tickets = result?.content ?? [];
+  const total = result?.totalElements ?? 0;
+  const isFiltered =
+    !!debouncedSearch || statusFilter !== "ALL" || priorityFilter !== "ALL";
 
   const canCreate =
     user?.role === "EMPLOYEE" ||
@@ -164,7 +173,7 @@ useEffect(() => {
     <div className="animate-fade-in">
       <PageHeader
         title="Tickets"
-        subtitle={`${filtered.length} ticket${filtered.length !== 1 ? "s" : ""} found`}
+        subtitle={`${total} ticket${total !== 1 ? "s" : ""} found`}
         breadcrumb={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Tickets" },
@@ -175,10 +184,7 @@ useEffect(() => {
               variant="secondary"
               size="md"
               leftIcon={<RefreshCw className="w-4 h-4" />}
-              onClick={() => {
-                setIsLoading(true);
-                void fetchTickets();
-              }}
+              onClick={refresh}
               isLoading={isLoading}
             >
               Refresh
@@ -202,16 +208,19 @@ useEffect(() => {
               <Input
                 placeholder="Search tickets..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => handleSearch(e.target.value)}
+                aria-label="Search tickets"
                 leftAddon={<Search className="w-4 h-4" />}
               />
             </div>
 
             <select
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as TicketStatus | "ALL")
-              }
+              aria-label="Filter by status"
+              onChange={(e) => {
+                setStatusFilter(e.target.value as TicketStatus | "ALL");
+                setPage(0);
+              }}
               className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
             >
               {STATUS_FILTER_OPTIONS.map((o) => (
@@ -223,9 +232,11 @@ useEffect(() => {
 
             <select
               value={priorityFilter}
-              onChange={(e) =>
-                setPriorityFilter(e.target.value as TicketPriority | "ALL")
-              }
+              aria-label="Filter by priority"
+              onChange={(e) => {
+                setPriorityFilter(e.target.value as TicketPriority | "ALL");
+                setPage(0);
+              }}
               className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
             >
               {PRIORITY_FILTER_OPTIONS.map((o) => (
@@ -238,24 +249,32 @@ useEffect(() => {
         </Card>
 
         {/* Table */}
-        {/* Table */}
         <Card padding="none">
-          {isLoading ? (
+          {isLoading && !result ? (
             <div className="p-6 space-y-3">
               {[...Array(6)].map((_, i) => (
                 <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : loadError && !result ? (
+            <EmptyState
+              icon={<Ticket className="w-6 h-6" />}
+              title="Tickets could not be loaded"
+              description="Check your connection and try again."
+              action={
+                <Button size="sm" variant="secondary" onClick={refresh}>
+                  Try again
+                </Button>
+              }
+            />
+          ) : tickets.length === 0 ? (
             <EmptyState
               icon={<Ticket className="w-6 h-6" />}
               title={
-                search || statusFilter !== "ALL" || priorityFilter !== "ALL"
-                  ? "No tickets match your filters"
-                  : "No tickets yet"
+                isFiltered ? "No tickets match your filters" : "No tickets yet"
               }
               description={
-                search || statusFilter !== "ALL" || priorityFilter !== "ALL"
+                isFiltered
                   ? "Try adjusting your search or filters."
                   : "Submit your first service request to get started."
               }
@@ -367,12 +386,10 @@ useEffect(() => {
                 </thead>
 
                 <tbody>
-                  {filtered.map((ticket) => (
+                  {tickets.map((ticket) => (
                     <tr
                       key={ticket.id}
-                      onClick={() => {
-                        window.location.href = `/tickets/${ticket.id}`;
-                      }}
+                      onClick={() => router.push(`/tickets/${ticket.id}`)}
                       className="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 cursor-pointer transition-colors"
                     >
                       <td className="px-4 py-4 font-mono text-xs text-slate-400">
@@ -425,6 +442,17 @@ useEffect(() => {
                 </tbody>
               </table>
             </div>
+          )}
+          {result && tickets.length > 0 && (
+            <Pagination
+              page={result.page}
+              totalPages={result.totalPages}
+              totalElements={result.totalElements}
+              size={result.size}
+              itemLabel="tickets"
+              onPageChange={setPage}
+              disabled={isLoading}
+            />
           )}
         </Card>
       </div>

@@ -1,9 +1,11 @@
 import { request } from '@/lib/api-client';
-import { NotificationResponse } from '@/types';
+import { toQuery } from '@/lib/query';
+import { NotificationResponse, PageQuery, PageResponse } from '@/types';
 
 export const notificationService = {
-  getAll(): Promise<NotificationResponse[]> {
-    return request<NotificationResponse[]>('/api/notifications');
+  // Newest first
+  getPage(query: PageQuery = {}): Promise<PageResponse<NotificationResponse>> {
+    return request<PageResponse<NotificationResponse>>(`/api/notifications${toQuery(query)}`);
   },
 
   getUnreadCount(): Promise<{ unreadCount: number }> {

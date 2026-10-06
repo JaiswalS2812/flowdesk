@@ -24,6 +24,8 @@ interface AuthContextValue {
     department: string
   ) => Promise<void>;
   logout: () => void;
+  // Ends this browser's session without a server call (e.g. after a password change)
+  clearSession: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -49,6 +51,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setIsLoading(false);
     /* eslint-enable react-hooks/set-state-in-effect */
+
+    // The stored profile may be stale (an admin may have changed the role or department)
+    if (stored && storedUser) {
+      authService
+        .me()
+        .then((fresh) => {
+          localStorage.setItem('flowdesk_user', JSON.stringify(fresh));
+          setUser(fresh);
+        })
+        .catch(() => {
+          // A 401 signs the user out in the API client; other errors keep the stored profile
+        });
+    }
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -72,13 +87,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  const logout = useCallback(() => {
+  const clearSession = useCallback(() => {
     removeToken();
     localStorage.removeItem('flowdesk_user');
     setTokenState(null);
     setUser(null);
-    window.location.href = '/login';
   }, []);
+
+  const logout = useCallback(() => {
+    clearSession();
+    window.location.href = '/login';
+  }, [clearSession]);
 
   return (
     <AuthContext.Provider
@@ -90,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         register,
         logout,
+        clearSession,
       }}
     >
       {children}

@@ -18,8 +18,10 @@ import {
   Menu,
   X,
   Shield,
+  KeyRound,
 } from 'lucide-react';
 import { Role } from '@/types';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 interface NavItem {
   label: string;
@@ -62,6 +64,11 @@ const NAV_ITEMS: NavItem[] = [
     href: '/sla-policies',
     icon: <Shield className="w-4 h-4" />,
     roles: ['ADMIN'],
+  },
+  {
+    label: 'Account',
+    href: '/account',
+    icon: <KeyRound className="w-4 h-4" />,
   },
 ];
 
@@ -280,7 +287,10 @@ export function PageHeader({
             <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
           )}
         </div>
-        {action && <div className="shrink-0">{action}</div>}
+        <div className="shrink-0 flex items-center gap-2">
+          {action}
+          <NotificationBell />
+        </div>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ticketService } from '@/services/ticket.service';
-import { TicketResponse } from '@/types';
+import { PageResponse, TicketResponse, TicketSummary } from '@/types';
 import { PageHeader } from '@/components/layout/Sidebar';
 import { Card, CardHeader, EmptyState, Skeleton } from '@/components/ui/Card';
 import { StatusBadge, PriorityBadge, SlaIndicator } from '@/components/tickets/Badges';
@@ -31,27 +31,28 @@ import {
   Cell,
 } from 'recharts';
 
-// ─── Stats computation ────────────────────────────────────────────────────────
+// ─── Chart data ───────────────────────────────────────────────────────────────
 
-function computeStats(tickets: TicketResponse[]) {
-  return {
-    total:      tickets.length,
-    open:       tickets.filter((t) => t.status === 'OPEN').length,
-    inProgress: tickets.filter((t) => t.status === 'IN_PROGRESS').length,
-    resolved:   tickets.filter((t) => t.status === 'RESOLVED' || t.status === 'CLOSED').length,
-    breached:   tickets.filter((t) => t.responseBreached || t.resolutionBreached).length,
-  };
+function priorityChartData(summary: TicketSummary | null) {
+  const counts = summary?.byPriority;
+  return [
+    { name: 'Low',      value: counts?.LOW ?? 0,      color: PRIORITY_CHART_COLORS.LOW },
+    { name: 'Medium',   value: counts?.MEDIUM ?? 0,   color: PRIORITY_CHART_COLORS.MEDIUM },
+    { name: 'High',     value: counts?.HIGH ?? 0,     color: PRIORITY_CHART_COLORS.HIGH },
+    { name: 'Critical', value: counts?.CRITICAL ?? 0, color: PRIORITY_CHART_COLORS.CRITICAL },
+  ];
 }
 
-function computePriorityData(tickets: TicketResponse[]) {
-  const counts = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
-  tickets.forEach((t) => counts[t.priority]++);
-  return [
-    { name: 'Low',      value: counts.LOW,      color: PRIORITY_CHART_COLORS.LOW },
-    { name: 'Medium',   value: counts.MEDIUM,   color: PRIORITY_CHART_COLORS.MEDIUM },
-    { name: 'High',     value: counts.HIGH,     color: PRIORITY_CHART_COLORS.HIGH },
-    { name: 'Critical', value: counts.CRITICAL, color: PRIORITY_CHART_COLORS.CRITICAL },
-  ];
+const AT_RISK_SHOWN = 10;
+
+// Counts come from the server for every visible ticket; only the lists are limited
+async function loadDashboard() {
+  const [summary, recent, atRisk] = await Promise.all([
+    ticketService.getSummary(),
+    ticketService.getPage({ size: 6 }),
+    ticketService.getPage({ atRisk: true, size: AT_RISK_SHOWN }),
+  ]);
+  return { summary, recent, atRisk };
 }
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
@@ -111,15 +112,19 @@ function ChartTooltip({
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [tickets, setTickets] = useState<TicketResponse[]>([]);
+  const [summary, setSummary] = useState<TicketSummary | null>(null);
+  const [recentTickets, setRecentTickets] = useState<TicketResponse[]>([]);
+  const [atRisk, setAtRisk] = useState<PageResponse<TicketResponse> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchTickets = useCallback(async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await ticketService.getAll();
-      setTickets(data);
+      const data = await loadDashboard();
+      setSummary(data.summary);
+      setRecentTickets(data.recent.content);
+      setAtRisk(data.atRisk);
       setError(null);
     } catch {
       setError('Could not load tickets. Please refresh.');
@@ -131,39 +136,36 @@ export default function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadTickets = async () => {
-      try {
-        const data = await ticketService.getAll();
-        if (!cancelled) {
-          setTickets(data);
-          setError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setError('Could not load tickets. Please refresh.');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadTickets();
+    loadDashboard()
+      .then((data) => {
+        if (cancelled) return;
+        setSummary(data.summary);
+        setRecentTickets(data.recent.content);
+        setAtRisk(data.atRisk);
+        setError(null);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load tickets. Please refresh.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const stats        = computeStats(tickets);
-  const priorityData = computePriorityData(tickets);
-  const recentTickets = [...tickets]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 6);
-  const slaWarnings = tickets.filter(
-    (t) => t.escalationLevel === 'WARNING' || t.escalationLevel === 'BREACHED'
-  );
+  const stats = {
+    total:      summary?.total ?? 0,
+    open:       summary?.open ?? 0,
+    inProgress: summary?.inProgress ?? 0,
+    resolved:   (summary?.resolved ?? 0) + (summary?.closed ?? 0),
+    breached:   summary?.breached ?? 0,
+  };
+  const priorityData = priorityChartData(summary);
+  const slaWarnings = atRisk?.content ?? [];
+  const atRiskTotal = atRisk?.totalElements ?? 0;
 
   const canCreate =
     user?.role === 'EMPLOYEE' || user?.role === 'MANAGER' || user?.role === 'ADMIN';
@@ -196,7 +198,7 @@ export default function DashboardPage() {
             </div>
             <button
               type="button"
-              onClick={fetchTickets}
+              onClick={fetchDashboard}
               className="text-xs font-semibold underline hover:no-underline text-red-800 cursor-pointer"
             >
               Retry
@@ -257,7 +259,7 @@ export default function DashboardPage() {
                   <Skeleton key={i} className="h-8 w-full" />
                 ))}
               </div>
-            ) : tickets.length === 0 ? (
+            ) : stats.total === 0 ? (
               <EmptyState
                 icon={<Ticket className="w-5 h-5" />}
                 title="No ticket data"
@@ -386,7 +388,8 @@ export default function DashboardPage() {
                 <div>
                   <h2 className="text-sm font-semibold text-slate-800">SLA Alerts</h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {slaWarnings.length} ticket{slaWarnings.length > 1 ? 's' : ''} require attention
+                    {atRiskTotal} open ticket{atRiskTotal > 1 ? 's' : ''} require attention
+                    {atRiskTotal > slaWarnings.length && ` · showing the ${slaWarnings.length} newest`}
                   </p>
                 </div>
               </div>
