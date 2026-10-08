@@ -2,9 +2,8 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, CalendarDays, Check, Clock, KeyRound, LogOut, Mail, Palette, ShieldCheck } from 'lucide-react';
+import { Building2, CalendarDays, Check, Clock, KeyRound, LogOut, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
 import { authService } from '@/services/auth.service';
 import { ApiError, Role } from '@/types';
 import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
@@ -16,8 +15,7 @@ import { Avatar } from '@/components/ui/Controls';
 import { Alert } from '@/components/ui/Feedback';
 import { useToast } from '@/components/ui/Toast';
 import { RoleBadge } from '@/components/tickets/Badges';
-import { THEME_OPTIONS } from '@/components/layout/ThemeSwitcher';
-import { cn, formatShortDate, ROLE_DESCRIPTIONS } from '@/utils';
+import { formatShortDate, ROLE_DESCRIPTIONS } from '@/utils';
 
 const EMPTY_FORM = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
@@ -81,7 +79,7 @@ export default function AccountPage() {
 
   return (
     <PageContainer className="max-w-[1100px]">
-      <PageHeader title="Account" subtitle="Your profile, appearance and sign-in security." />
+      <PageHeader title="Account" subtitle="Your profile, permissions and sign-in security." />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className="space-y-6">
@@ -130,12 +128,6 @@ export default function AccountPage() {
                 </li>
               ))}
             </ul>
-          </Card>
-
-          {/* Appearance */}
-          <Card>
-            <CardHeader title="Appearance" subtitle="Saved on this device" icon={<Palette />} />
-            <ThemeCards />
           </Card>
         </div>
 
@@ -204,37 +196,5 @@ export default function AccountPage() {
         </div>
       </div>
     </PageContainer>
-  );
-}
-
-function ThemeCards() {
-  const { preference, setPreference } = useTheme();
-  return (
-    <div className="grid grid-cols-2 gap-2" role="group" aria-label="Theme">
-      {THEME_OPTIONS.map((t) => {
-        const selected = preference === t.value;
-        return (
-          <button
-            key={t.value}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => setPreference(t.value)}
-            className={cn(
-              'flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors cursor-pointer',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              selected ? 'border-accent bg-accent-soft/40' : 'border-line hover:border-line-strong hover:bg-surface-2'
-            )}
-          >
-            <span className={cn('mt-0.5 [&_svg]:size-4', selected ? 'text-accent' : 'text-fg-subtle')} aria-hidden>
-              {t.icon}
-            </span>
-            <span>
-              <span className="block text-[13px] font-medium text-fg">{t.label}</span>
-              <span className="block text-[11.5px] leading-snug text-fg-muted">{t.description}</span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
   );
 }

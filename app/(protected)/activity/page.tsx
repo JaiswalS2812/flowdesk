@@ -192,8 +192,9 @@ export default function ActivityPage() {
         ) : (
           <div className={cn('transition-opacity', isLoading && 'opacity-60')} aria-busy={isLoading}>
             {/* Wide: table with fixed columns; Details wraps, Timestamp keeps a stable width */}
-            <div className="hidden @[820px]:block">
-              <Table minWidth={820} caption="Audit events">
+            <div className="hidden @[960px]:block">
+              <Table minWidth={960} caption="Audit events">
+                {/* Action, Entity, Actor and Time are fixed; Details takes the remaining width and wraps */}
                 <colgroup>
                   <Col width={168} />
                   <Col width={136} />
@@ -238,7 +239,7 @@ export default function ActivityPage() {
             </div>
 
             {/* Narrow: stacked entries */}
-            <div className="@[820px]:hidden">
+            <div className="@[960px]:hidden">
               {groups.map((g) => (
                 <section key={g.day} aria-label={g.day}>
                   <h3 className="border-b border-line bg-canvas/60 px-4 py-1.5 text-[11px] font-semibold text-fg-muted">{g.day}</h3>

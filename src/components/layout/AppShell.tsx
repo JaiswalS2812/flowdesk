@@ -13,9 +13,9 @@ import { Avatar } from '@/components/ui/Controls';
 import { Kbd } from '@/components/ui/Badge';
 import { IconButton } from '@/components/ui/Button';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
-import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';
+import { ThemeMenu } from '@/components/layout/ThemeSwitcher';
 import { Footer } from '@/components/layout/Footer';
 import { breadcrumbsFor, isActive, navFor } from '@/components/layout/nav';
 import { UserResponse } from '@/types';
@@ -329,11 +329,6 @@ function AccountMenu({
           </Link>
         </MenuItem>
         <MenuSeparator />
-        <MenuLabel>Theme</MenuLabel>
-        <div className="px-2 pb-2" onKeyDown={(e) => e.stopPropagation()}>
-          <ThemeSwitcher showLabels size="sm" />
-        </div>
-        <MenuSeparator />
         <MenuItem icon={<LogOut />} onSelect={logout} danger>
           Sign out
         </MenuItem>
@@ -390,9 +385,7 @@ function Topbar({
           <IconButton label="Search and commands" onClick={onSearch} className="lg:hidden">
             <Search className="size-[18px]" />
           </IconButton>
-          <div className="hidden md:block">
-            <ThemeSwitcher />
-          </div>
+          <ThemeMenu />
           <NotificationBell />
           {user && (
             <div className="lg:hidden">

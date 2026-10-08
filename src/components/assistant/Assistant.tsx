@@ -8,6 +8,7 @@ import { cn, plural } from '@/utils';
 import { LogoMark } from '@/components/brand/Logo';
 import { StatusBadge, PriorityBadge, SlaIndicator } from '@/components/tickets/Badges';
 import { CAN_CREATE_TICKETS } from '@/components/layout/nav';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { answer, AssistantBlock, SUGGESTIONS } from '@/components/assistant/engine';
 
 interface Message {
@@ -19,6 +20,17 @@ interface Message {
 
 let nextId = 1;
 
+// Ctrl+Shift+Space (⌘+Shift+Space on macOS): not used by browsers, and unlike Ctrl+Space it
+// does not collide with common input-method switching
+function isShortcut(e: KeyboardEvent) {
+  return (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && (e.code === 'Space' || e.key === ' ');
+}
+
+function isTypingTarget(el: EventTarget | null) {
+  if (!(el instanceof HTMLElement)) return false;
+  return el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes((el as HTMLInputElement).type));
+}
+
 export function Assistant() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -28,7 +40,46 @@ export function Assistant() {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const launcherRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const [compact, setCompact] = useState(false);
+  const [isMac, setIsMac] = useState(false);
   const canCreate = !!user && CAN_CREATE_TICKETS.includes(user.role);
+  const shortcutLabel = isMac ? '⌘ ⇧ Space' : 'Ctrl Shift Space';
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- platform is only known in the browser
+    setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent));
+  }, []);
+
+  // Global shortcut: opens the assistant, or focuses it when already open. Ignored while the
+  // user is typing in another field, so it never interrupts text entry.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isShortcut(e)) return;
+      const inAssistant = panelRef.current?.contains(e.target as Node);
+      if (isTypingTarget(e.target) && !inAssistant) return;
+      e.preventDefault();
+      if (!open) setOpen(true);
+      else inputRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  // While the page scrolls, the launcher shrinks to its icon so it covers as little as possible
+  useEffect(() => {
+    let timer = 0;
+    const onScroll = () => {
+      setCompact(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setCompact(false), 900);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
@@ -70,30 +121,45 @@ export function Assistant() {
 
   return (
     <>
-      <button
-        ref={launcherRef}
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-controls="flowdesk-assistant"
-        aria-label={open ? 'Close FlowDesk Assistant' : 'Open FlowDesk Assistant'}
-        className={cn(
-          'fixed bottom-4 right-4 z-40 flex h-11 items-center gap-2 rounded-full border border-line bg-surface pl-1.5 pr-1.5 text-[13px] font-medium text-fg shadow-lg sm:bottom-5 sm:right-5 sm:pr-4 cursor-pointer',
-          'transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          open && 'sm:pr-1.5'
-        )}
-      >
-        <span className="relative">
-          <LogoMark className="size-8" />
-          {!open && <Sparkles className="absolute -right-1 -top-1 size-3.5 text-amber" aria-hidden />}
-        </span>
-        <span className={cn('hidden sm:inline', open && 'sm:hidden')}>Assistant</span>
-        {open && <X className="mx-1.5 size-4 text-fg-muted" aria-hidden />}
-      </button>
+      <Tooltip content={<span>FlowDesk Assistant <span className="opacity-60">· {shortcutLabel}</span></span>} side="left" disabled={open}>
+        <button
+          ref={launcherRef}
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          aria-controls="flowdesk-assistant"
+          aria-keyshortcuts={isMac ? 'Meta+Shift+Space' : 'Control+Shift+Space'}
+          aria-label={open ? 'Close FlowDesk Assistant' : `Need a hand? Open FlowDesk Assistant (${shortcutLabel})`}
+          className={cn(
+            'fixed bottom-4 right-4 z-40 flex h-11 items-center gap-2 rounded-full border border-line bg-surface/95 p-1.5 text-[13px] font-medium text-fg shadow-lg backdrop-blur sm:bottom-5 sm:right-5 cursor-pointer',
+            'transition-[transform,box-shadow,padding,opacity] duration-200 ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-xl active:translate-y-0',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            !open && !compact && 'sm:pr-4',
+            compact && !open && 'opacity-90'
+          )}
+        >
+          <span className="relative">
+            <LogoMark className="size-8" />
+            {!open && <Sparkles className="absolute -right-1 -top-1 size-3.5 text-amber" aria-hidden />}
+          </span>
+          {!open && (
+            <span
+              className={cn(
+                'hidden overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 sm:inline',
+                compact ? 'max-w-0 opacity-0' : 'max-w-[140px] opacity-100'
+              )}
+              aria-hidden
+            >
+              Need a hand?
+            </span>
+          )}
+          {open && <X className="mx-1.5 size-4 text-fg-muted" aria-hidden />}
+        </button>
+      </Tooltip>
 
       {open && (
         <section
+          ref={panelRef}
           id="flowdesk-assistant"
           role="dialog"
           aria-label="FlowDesk Assistant"
@@ -156,7 +222,7 @@ export function Assistant() {
                 <p className="mt-4 flex items-start gap-1.5 rounded-lg bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-fg-subtle">
                   <Info className="mt-px size-3.5 shrink-0" aria-hidden />
                   Answers come from your FlowDesk tickets (only what your role can see) and the Help Center. This assistant
-                  follows fixed rules and does not use AI.
+                  follows fixed rules and does not use AI. Open it anytime with {shortcutLabel}.
                 </p>
               </div>
             )}

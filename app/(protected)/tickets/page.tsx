@@ -260,7 +260,7 @@ function TicketsView() {
         </div>
       </div>
 
-      <Card padding="none" className="overflow-hidden">
+      <Card padding="none" className="@container overflow-hidden">
         {isLoading && !result ? (
           <SkeletonRows rows={8} />
         ) : loadError && !result ? (
@@ -284,17 +284,18 @@ function TicketsView() {
           />
         ) : (
           <div className={cn('transition-opacity duration-200', isLoading && 'opacity-60')} aria-busy={isLoading}>
-            {/* Desktop and tablet: table */}
-            <div className="hidden md:block">
-              <Table minWidth={760} caption="Tickets">
+            {/* Wide containers: table (switches with the card width, so the sidebar state matters) */}
+            <div className="hidden @[1000px]:block">
+              <Table minWidth={992} caption="Tickets">
+                {/* Title flexes; every other column has a fixed width shared by header and rows */}
                 <colgroup>
                   <Col width={72} />
                   <Col />
-                  <Col width={136} />
-                  <Col width={116} />
-                  <Col width={200} />
-                  <Col width={112} />
-                  <Col width={112} />
+                  <Col width={132} />
+                  <Col width={124} />
+                  <Col width={172} />
+                  <Col width={108} />
+                  <Col width={104} />
                 </colgroup>
                 <TableHead>
                   <tr>
@@ -348,8 +349,8 @@ function TicketsView() {
               </Table>
             </div>
 
-            {/* Phones: cards */}
-            <ul className="divide-y divide-line md:hidden">
+            {/* Narrower containers: cards */}
+            <ul className="divide-y divide-line @[1000px]:hidden">
               {tickets.map((t) => (
                 <li key={t.id}>
                   <Link href={`/tickets/${t.id}`} className="block px-4 py-3.5 transition-colors active:bg-surface-2">

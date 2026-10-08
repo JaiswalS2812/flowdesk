@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/FormFields';
 import { Avatar, SegmentedControl } from '@/components/ui/Controls';
+import { Email } from '@/components/ui/Email';
 import { Alert, EmptyState, ErrorState, SkeletonRows } from '@/components/ui/Feedback';
 import { ConfirmDialog, Modal } from '@/components/ui/Dialog';
 import { Pagination } from '@/components/ui/Pagination';
@@ -175,7 +176,7 @@ export default function UsersPage() {
         />
       </div>
 
-      <Card padding="none" className="overflow-hidden">
+      <Card padding="none" className="@container overflow-hidden">
         {isLoading && !result ? (
           <SkeletonRows rows={6} />
         ) : loadError && !result ? (
@@ -188,14 +189,15 @@ export default function UsersPage() {
           />
         ) : (
           <div className={cn('transition-opacity', isLoading && 'opacity-60')}>
-            <div className="hidden lg:block">
-              <Table minWidth={900} caption="Users">
+            <div className="hidden @[1040px]:block">
+              <Table minWidth={1036} caption="Users">
+                {/* One explicit grid for header and rows: User flexes, every other column is fixed */}
                 <colgroup>
                   <Col />
-                  <Col width={150} />
-                  <Col width={170} />
-                  <Col width={130} />
-                  <Col width={120} />
+                  <Col width={156} />
+                  <Col width={160} />
+                  <Col width={124} />
+                  <Col width={116} />
                   <Col width={220} />
                 </colgroup>
                 <TableHead>
@@ -241,8 +243,8 @@ export default function UsersPage() {
               </Table>
             </div>
 
-            {/* Below lg: cards keep every field readable without horizontal scrolling */}
-            <ul className="divide-y divide-line lg:hidden">
+            {/* Narrower containers: cards keep every field readable without horizontal scrolling */}
+            <ul className="divide-y divide-line @[1040px]:hidden">
               {users.map((u) => (
                 <li key={u.id} className={cn('px-4 py-4', u.id === me?.id && 'bg-accent-soft/30', !u.active && 'opacity-75')}>
                   <UserCell user={u} isMe={u.id === me?.id} />
@@ -332,17 +334,16 @@ export default function UsersPage() {
 // ─── Row pieces ──────────────────────────────────────────────────────────────
 
 function UserCell({ user, isMe }: { user: UserResponse; isMe: boolean }) {
+  // Long names and emails wrap inside the flexible User column instead of widening the table
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Avatar name={user.name} seed={user.email} />
       <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-[13px] font-medium text-fg">
-          <span className="truncate">{user.name}</span>
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] font-medium leading-snug text-fg">
+          <span className="wrap-anywhere">{user.name}</span>
           {isMe && <Badge tone="accent">You</Badge>}
         </p>
-        <p className="truncate text-xs text-fg-muted" title={user.email}>
-          {user.email}
-        </p>
+        <Email value={user.email} className="block text-xs leading-snug text-fg-muted" />
       </div>
     </div>
   );

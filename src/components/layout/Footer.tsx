@@ -16,8 +16,9 @@ export function Footer({ role }: { role?: Role }) {
     { label: 'Account & security', href: '/account' },
   ];
 
+  // Bottom/right padding keeps the floating assistant launcher clear of footer content
   return (
-    <footer className="mt-auto border-t border-line">
+    <footer className="mt-auto border-t border-line pb-16 sm:pb-0">
       <div className="mx-auto grid w-full max-w-[1400px] gap-8 px-4 py-8 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr] lg:px-8">
         <div className="max-w-sm">
           <div className="flex items-center gap-2">
@@ -33,7 +34,7 @@ export function Footer({ role }: { role?: Role }) {
         <FooterColumn title="Support" links={support} />
       </div>
       <div className="border-t border-line">
-        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-1 px-4 py-4 text-xs text-fg-subtle sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-1 px-4 py-4 text-xs text-fg-subtle sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pr-48 lg:px-8 lg:pr-48">
           <p>© {new Date().getFullYear()} FlowDesk</p>
           <p>Built with Next.js, Spring Boot and MySQL</p>
         </div>

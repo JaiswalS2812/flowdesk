@@ -4,7 +4,7 @@ import React from 'react';
 import { usePathname } from 'next/navigation';
 import { ShieldCheck, Timer, Workflow, BellRing } from 'lucide-react';
 import { Logo, LogoMark } from '@/components/brand/Logo';
-import { ThemeSwitcher } from '@/components/layout/ThemeSwitcher';
+import { ThemeMenu } from '@/components/layout/ThemeSwitcher';
 
 const HIGHLIGHTS = [
   { icon: Workflow, title: 'Enforced workflow', text: 'Open → In Progress → Resolved → Closed, with role-based assignment.' },
@@ -76,7 +76,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <Logo animated />
           </span>
           <span className="hidden lg:block" />
-          <ThemeSwitcher />
+          <ThemeMenu />
         </div>
         <div className="flex flex-1 items-center justify-center px-5 pb-12 pt-4 sm:px-8">
           <div key={pathname} className="w-full max-w-[400px] animate-enter">

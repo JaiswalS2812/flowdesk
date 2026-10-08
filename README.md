@@ -44,7 +44,8 @@ per backend area), `src/lib/api-client.ts` (fetch wrapper, token and error handl
   each map to a tone, so badges stay consistent and readable everywhere.
 - **Three themes**: Light, Dark and Warm (a low-glare paper theme with a copper accent), plus
   *System*, which follows the OS light/dark setting. Each theme defines every token, including
-  status colours, shadows, inputs, overlays and skeletons. The choice is saved in
+  status colours, shadows, inputs, overlays and skeletons. One compact control in the header
+  (and on the sign-in screens) opens a small picker with the four options. The choice is saved in
   `localStorage` and applied by a small inline script before first paint, so there is no flash;
   the collapsed-sidebar state is restored the same way.
 - **Components** (`src/components/ui`): Button/IconButton, Input, PasswordInput (visibility
@@ -56,17 +57,20 @@ per backend area), `src/lib/api-client.ts` (fetch wrapper, token and error handl
 - **Motion** is CSS-only (no animation library): short entrance and stagger animations,
   Radix open/close states, counters and progress bars. Everything respects
   `prefers-reduced-motion`.
-- **Tables** use `table-layout: fixed` with explicit widths: long text (audit details, emails)
-  wraps inside its column instead of pushing later columns out of view. The audit log uses a
-  container query, so collapsing the sidebar gives it the room to switch from stacked entries to
-  the full table; phones get card layouts.
+- **Tables** share one component (`src/components/ui/Table.tsx`): `table-layout: fixed`, a
+  `<colgroup>` used by header and rows alike, explicit header alignment, one flexible column
+  (title, user, details) and fixed widths for the rest. Long text (audit details, names, emails)
+  wraps inside its column instead of pushing later columns, such as the audit timestamp, out of
+  view. Tickets, Users and the audit log switch between table and card layouts with container
+  queries on the card's own width, so collapsing the sidebar gives them room for the full table.
 
 ## Assistant, command menu and Help Center
 
 - **Command menu** (`Ctrl/⌘ K`, built with `cmdk`): jump to pages, open a ticket by number,
   search tickets through the regular API (only tickets the user may see), find help articles,
   switch theme, sign out.
-- **FlowDesk Assistant** (corner button): a rule-based helper, **not** an AI model. It
+- **FlowDesk Assistant** (the "Need a hand?" launcher, or `Ctrl+Shift+Space` / `⌘+Shift+Space`;
+  the shortcut is ignored while typing in another field): a rule-based helper, **not** an AI model. It
   recognises a small set of requests (a ticket by number, SLA risks, workload summary, unread
   notifications, ticket lists by status) and answers them from the user's own data through the
   normal authorised API, and answers how-to questions from the Help Center content. Anything
