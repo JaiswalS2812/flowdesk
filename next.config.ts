@@ -3,14 +3,15 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === "development";
 
 // Static CSP (pages are prerendered, so per-request nonces are not available).
-// 'unsafe-inline' scripts are needed for Next.js's inline bootstrap scripts; dev adds
-// eval and the hot-reload websocket. Fonts come from Google Fonts (app/layout.tsx).
+// 'unsafe-inline' scripts are needed for Next.js's inline bootstrap scripts and the theme
+// script in app/layout.tsx; dev adds eval and the hot-reload websocket. Fonts are self-hosted
+// by next/font, so no external origin is allowed.
 // API calls go to this origin and are proxied to the backend by the rewrite below.
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' blob: data:",
   `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
   "object-src 'none'",

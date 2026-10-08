@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login, state } from './helpers';
+import { login, signOut, state } from './helpers';
 
 // One ticket's journey through the roles, plus the admin and account pages.
 // Runs in order: later steps use the ticket created first.
@@ -31,7 +31,9 @@ test('employee creates a ticket and sees it', async ({ page }) => {
   await page.goto('/tickets/new');
   await page.getByLabel('Title').fill(title);
   await page.getByLabel('Description').fill('Paper jam on floor 3 (E2E test).');
-  await page.getByLabel('Priority').selectOption('LOW');
+  // Priority is a set of radio cards
+  await page.getByRole('radio', { name: /^Low/ }).check({ force: true });
+  await expect(page.getByRole('radio', { name: /^Low/ })).toBeChecked();
   await page.getByRole('button', { name: 'Submit Ticket' }).click();
 
   await expect(page).toHaveURL(/\/tickets\/\d+$/);
@@ -72,12 +74,12 @@ test('engineer is notified, opens the ticket and moves it forward', async ({ pag
   await page.getByRole('button', { name: /Ticket assigned to you/ }).first().click();
   await expect(page).toHaveURL(new RegExp(`/tickets/${ticketId}$`));
 
-  // Only valid next statuses are offered
-  const status = page.getByLabel('New status');
-  await expect(status.locator('option')).toHaveText(['Open', 'In Progress', 'Cancelled']);
-  await status.selectOption('IN_PROGRESS');
-  await page.getByRole('button', { name: 'Update Status' }).click();
-  await expect(status.locator('option')).toHaveText(['In Progress', 'Resolved', 'Cancelled']);
+  // Only the valid next steps are offered as workflow actions
+  const actions = page.getByRole('group', { name: 'Workflow actions' });
+  await expect(actions.getByRole('button')).toHaveText(['Cancel ticket', 'Start progress']);
+  await actions.getByRole('button', { name: 'Start progress' }).click();
+  await expect(page.getByText('Ticket is now In Progress.')).toBeVisible();
+  await expect(actions.getByRole('button')).toHaveText(['Cancel ticket', 'Mark resolved']);
 });
 
 test('employee sees the status change in notifications', async ({ page }) => {
@@ -94,7 +96,7 @@ test('admin manages users; other roles are kept out', async ({ page }) => {
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Edit' }).click();
   await page.getByLabel('Department').fill(`${s.department}-MOVED`);
-  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByText('User updated')).toBeVisible();
   await expect(row).toContainText(`${s.department}-MOVED`);
 
@@ -111,7 +113,7 @@ test('admin views SLA policies without changing them; employee is redirected', a
   }
   await expect(page.getByRole('button', { name: 'Edit' })).toHaveCount(4);
 
-  await page.getByRole('button', { name: 'Logout' }).click();
+  await signOut(page);
   await login(page, employee);
   await page.goto('/sla-policies');
   await expect(page).toHaveURL(/\/dashboard$/);

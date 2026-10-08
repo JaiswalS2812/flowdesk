@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { login, state, unexpected, watchConsole } from './helpers';
+import { login, signOut, state, unexpected, watchConsole } from './helpers';
 
 // Browser-level checks: every page of every role renders without console errors or CSP
 // violations, role-based navigation matches the backend rules, and phone-width layouts fit.
@@ -59,7 +59,7 @@ test('phone width: no horizontal page scroll on the main pages', async ({ page }
   const problems = watchConsole(page);
   await login(page, s.users.admin);
 
-  for (const path of ['/dashboard', '/tickets', '/users', '/activity', '/account']) {
+  for (const path of ['/dashboard', '/tickets', '/tickets/new', '/users', '/activity', '/sla-policies', '/account', '/help']) {
     await page.goto(path);
     await expect(page.locator('h1').first()).toBeVisible();
     await page.waitForLoadState('networkidle');
@@ -74,8 +74,7 @@ test('phone width: no horizontal page scroll on the main pages', async ({ page }
 
 test('signing out clears the session', async ({ page }) => {
   await login(page, s.users.employee);
-  await page.getByRole('button', { name: 'Logout' }).click();
-  await expect(page).toHaveURL(/\/login$/);
+  await signOut(page);
   await page.goto('/tickets');
   await expect(page).toHaveURL(/\/login$/);
   expect(await page.evaluate(() => localStorage.getItem('flowdesk_token'))).toBeNull();

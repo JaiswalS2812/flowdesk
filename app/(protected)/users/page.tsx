@@ -1,70 +1,55 @@
 'use client';
 
-import React, { Fragment, useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Pencil, RefreshCw, Search, UserCheck, Users, UserX, ShieldCheck } from 'lucide-react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { userService } from '@/services/user.service';
 import { ApiError, PageResponse, Role, UserResponse } from '@/types';
-import { Pagination } from '@/components/ui/Pagination';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useAuth } from '@/contexts/AuthContext';
-import { PageHeader } from '@/components/layout/Sidebar';
-import {
-  Badge,
-  Card,
-  EmptyState,
-  Skeleton,
-  Table,
-  TableHead,
-  TableBody,
-  Th,
-  Tr,
-  Td,
-} from '@/components/ui/Card';
-import { RoleBadge } from '@/components/tickets/Badges';
+import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/FormFields';
+import { Avatar, SegmentedControl } from '@/components/ui/Controls';
+import { Alert, EmptyState, ErrorState, SkeletonRows } from '@/components/ui/Feedback';
+import { ConfirmDialog, Modal } from '@/components/ui/Dialog';
+import { Pagination } from '@/components/ui/Pagination';
+import { Table, Col, TableHead, TableBody, Th, Tr, Td } from '@/components/ui/Table';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { useToast } from '@/components/ui/Toast';
-import { formatDate, ROLE_LABELS } from '@/utils';
-import { Users, UserX, UserCheck, RefreshCw, Pencil, Search } from 'lucide-react';
-
-const ROLE_OPTIONS = (Object.keys(ROLE_LABELS) as Role[]).map((role) => ({
-  value: role,
-  label: ROLE_LABELS[role],
-}));
+import { RoleBadge } from '@/components/tickets/Badges';
+import { cn, formatDate, formatShortDate, ROLE_DESCRIPTIONS, ROLE_LABELS, ROLES } from '@/utils';
 
 const PAGE_SIZE = 20;
-
-const STATUS_OPTIONS = [
-  { value: 'ALL', label: 'All users' },
-  { value: 'ACTIVE', label: 'Active' },
-  { value: 'INACTIVE', label: 'Deactivated' },
-];
-
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 export default function UsersPage() {
   useRequireAuth({ allowedRoles: ['ADMIN'] });
+  const { user: me } = useAuth();
+  const { success, error } = useToast();
 
   const [result, setResult] = useState<PageResponse<UserResponse> | null>(null);
   const [counts, setCounts] = useState({ total: 0, active: 0 });
   const [isLoading, setIsLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState<number | null>(null);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editRole, setEditRole] = useState<Role>('EMPLOYEE');
-  const [editDepartment, setEditDepartment] = useState('');
-  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [page, setPage] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const debouncedSearch = useDebouncedValue(search.trim());
-  const { success, error } = useToast();
-  const { user: currentUser } = useAuth();
+
+  const [editing, setEditing] = useState<UserResponse | null>(null);
+  const [deactivating, setDeactivating] = useState<UserResponse | null>(null);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | null>(null);
 
   // Search, filtering and paging happen on the server (sorted by name)
   useEffect(() => {
     let cancelled = false;
-
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading indicator for the new request
+    setIsLoading(true);
     Promise.all([
       userService.getPage({
         page,
@@ -83,322 +68,438 @@ export default function UsersPage() {
         }
         setResult(data);
         setCounts({ total: all.totalElements, active: active.totalElements });
+        setLoadError(false);
       })
-      .catch(() => {
-        if (!cancelled) error('Error', 'Could not load users. Please refresh.');
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
+      .catch(() => !cancelled && setLoadError(true))
+      .finally(() => !cancelled && setIsLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [page, debouncedSearch, statusFilter, reloadKey, error]);
+  }, [page, debouncedSearch, statusFilter, reloadKey]);
 
-  const fetchUsers = useCallback(() => {
-    setIsLoading(true);
-    setReloadKey((k) => k + 1);
-  }, []);
+  const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
 
-  const users = result?.content ?? [];
-
-  // Update the row in place, then refresh the counts (and the filtered list) from the server
+  // Update the row in place, then refresh counts and the filtered list from the server
   const replaceUser = (updated: UserResponse) => {
-    setResult((prev) =>
-      prev
-        ? { ...prev, content: prev.content.map((u) => (u.id === updated.id ? updated : u)) }
-        : prev
-    );
-    setReloadKey((k) => k + 1);
+    setResult((prev) => (prev ? { ...prev, content: prev.content.map((u) => (u.id === updated.id ? updated : u)) } : prev));
+    refresh();
   };
 
   // Users are deactivated, never deleted: their tickets and history stay intact
-  const handleDeactivate = async (target: UserResponse) => {
-    if (
-      !confirm(
-        `Deactivate ${target.name}? They will be signed out and unable to log in. ` +
-          'Their tickets, comments and history are kept, and they can be reactivated later.'
-      )
-    )
-      return;
-    setUpdatingId(target.id);
+  const confirmDeactivate = async () => {
+    if (!deactivating) return;
+    setBusyId(deactivating.id);
+    setDeactivateError(null);
     try {
-      replaceUser(await userService.deactivate(target.id));
-      success('User deactivated', `${target.name} can no longer sign in.`);
+      replaceUser(await userService.deactivate(deactivating.id));
+      success('User deactivated', `${deactivating.name} can no longer sign in.`);
+      setDeactivating(null);
     } catch (err) {
-      error('Could not deactivate user', (err as ApiError).message);
+      // e.g. open assigned tickets, own account or last admin (enforced by the backend)
+      setDeactivateError((err as ApiError).message);
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   };
 
-  const handleReactivate = async (target: UserResponse) => {
-    setUpdatingId(target.id);
+  const reactivate = async (target: UserResponse) => {
+    setBusyId(target.id);
     try {
       replaceUser(await userService.reactivate(target.id));
       success('User reactivated', `${target.name} can sign in again.`);
     } catch (err) {
       error('Could not reactivate user', (err as ApiError).message);
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   };
 
-  const startEdit = (target: UserResponse) => {
-    setEditingId(target.id);
-    setEditRole(target.role);
-    setEditDepartment(target.department);
-    setEditErrors({});
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditErrors({});
-  };
-
-  // Role and department changes; the backend enforces admin-only access and the
-  // self / last-admin / open-ticket rules, and notifies the user
-  const handleSaveEdit = async (target: UserResponse) => {
-    const department = editDepartment.trim();
-    if (department.length < 2 || department.length > 100) {
-      setEditErrors({ department: 'Department must be between 2 and 100 characters.' });
-      return;
-    }
-    setUpdatingId(target.id);
-    try {
-      replaceUser(await userService.update(target.id, { role: editRole, department }));
-      setEditingId(null);
-      success('User updated', `${target.name} is now ${ROLE_LABELS[editRole]} in ${department}.`);
-    } catch (err) {
-      const apiErr = err as ApiError;
-      if (apiErr.fields) setEditErrors(apiErr.fields);
-      else error('Could not update user', apiErr.message);
-    } finally {
-      setUpdatingId(null);
-    }
-  };
+  const users = result?.content ?? [];
+  const inactive = counts.total - counts.active;
+  const filtered = !!debouncedSearch || statusFilter !== 'ALL';
 
   return (
-    <div className="animate-fade-in">
+    <PageContainer>
       <PageHeader
-        title="User Management"
-        subtitle={`${counts.total} registered user${counts.total !== 1 ? 's' : ''} · ${counts.active} active`}
-        breadcrumb={[
-          { label: 'Dashboard', href: '/dashboard' },
-          { label: 'Users' },
-        ]}
-        action={
-          <Button
-            variant="secondary"
-            size="md"
-            leftIcon={<RefreshCw className="w-4 h-4" />}
-            onClick={fetchUsers}
-            isLoading={isLoading}
-          >
+        title="Users"
+        subtitle="Manage roles, departments and access. Users are deactivated, never deleted."
+        actions={
+          <Button variant="secondary" leftIcon={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />} onClick={refresh} disabled={isLoading}>
             Refresh
           </Button>
         }
       />
 
-      <div className="px-6 lg:px-8 py-6 space-y-4">
-        <Card padding="sm">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
-              <Input
-                placeholder="Search by name or email..."
-                aria-label="Search users"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(0);
-                }}
-                leftAddon={<Search className="w-4 h-4" />}
-              />
+      <div className="mb-5 grid grid-cols-3 gap-3">
+        {[
+          { label: 'Registered', value: counts.total, icon: <Users /> },
+          { label: 'Active', value: counts.active, icon: <UserCheck /> },
+          { label: 'Deactivated', value: inactive, icon: <UserX /> },
+        ].map((s, i) => (
+          <Card key={s.label} padding="sm" className="stagger flex items-center gap-3" style={{ ['--i' as string]: i }}>
+            <span className="hidden size-9 shrink-0 place-items-center rounded-lg border border-line bg-surface-2 text-fg-muted sm:grid [&_svg]:size-4" aria-hidden>
+              {s.icon}
+            </span>
+            <div>
+              <p className="text-[11.5px] text-fg-muted">{s.label}</p>
+              <p className="text-xl font-semibold text-fg tabular">{result ? s.value : '–'}</p>
             </div>
-            <div className="sm:w-48">
-              <Select
-                aria-label="Filter by status"
-                options={STATUS_OPTIONS}
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value as StatusFilter);
-                  setPage(0);
-                }}
-              />
-            </div>
-          </div>
-        </Card>
+          </Card>
+        ))}
+      </div>
 
-        <Card padding="none">
-          {isLoading && !result ? (
-            <div className="p-6 space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
+      <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <Input
+          placeholder="Search by name or email…"
+          aria-label="Search users"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(0);
+          }}
+          leftAddon={<Search />}
+          fieldClassName="sm:max-w-sm"
+        />
+        <SegmentedControl
+          label="Filter by status"
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v);
+            setPage(0);
+          }}
+          options={[
+            { value: 'ALL', label: 'All' },
+            { value: 'ACTIVE', label: 'Active' },
+            { value: 'INACTIVE', label: 'Deactivated' },
+          ]}
+        />
+      </div>
+
+      <Card padding="none" className="overflow-hidden">
+        {isLoading && !result ? (
+          <SkeletonRows rows={6} />
+        ) : loadError && !result ? (
+          <ErrorState title="Users could not be loaded" onRetry={refresh} />
+        ) : users.length === 0 ? (
+          <EmptyState
+            icon={<Users />}
+            title="No users found"
+            description={filtered ? 'No users match your search or filter.' : 'Users appear here after they register.'}
+          />
+        ) : (
+          <div className={cn('transition-opacity', isLoading && 'opacity-60')}>
+            <div className="hidden lg:block">
+              <Table minWidth={900} caption="Users">
+                <colgroup>
+                  <Col />
+                  <Col width={150} />
+                  <Col width={170} />
+                  <Col width={130} />
+                  <Col width={120} />
+                  <Col width={220} />
+                </colgroup>
+                <TableHead>
+                  <tr>
+                    <Th>User</Th>
+                    <Th>Role</Th>
+                    <Th>Department</Th>
+                    <Th>Status</Th>
+                    <Th>Joined</Th>
+                    <Th align="right">Actions</Th>
+                  </tr>
+                </TableHead>
+                <TableBody>
+                  {users.map((u) => (
+                    <Tr key={u.id} muted={!u.active} highlight={u.id === me?.id}>
+                      <Td>
+                        <UserCell user={u} isMe={u.id === me?.id} />
+                      </Td>
+                      <Td><RoleBadge role={u.role} /></Td>
+                      <Td className="wrap-anywhere">{u.department}</Td>
+                      <Td><ActiveBadge user={u} /></Td>
+                      <Td className="whitespace-nowrap text-fg-muted">
+                        <Tooltip content={formatDate(u.createdAt)}>
+                          <span tabIndex={0}>{formatShortDate(u.createdAt)}</span>
+                        </Tooltip>
+                      </Td>
+                      <Td align="right">
+                        <RowActions
+                          user={u}
+                          isMe={u.id === me?.id}
+                          busy={busyId === u.id}
+                          onEdit={() => setEditing(u)}
+                          onDeactivate={() => {
+                            setDeactivateError(null);
+                            setDeactivating(u);
+                          }}
+                          onReactivate={() => reactivate(u)}
+                        />
+                      </Td>
+                    </Tr>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-          ) : users.length === 0 ? (
-            <EmptyState
-              icon={<Users className="w-6 h-6" />}
-              title="No users found"
-              description={
-                debouncedSearch || statusFilter !== 'ALL'
-                  ? 'No users match your search or filter.'
-                  : 'Users will appear here after they register.'
-              }
-            />
-          ) : (
-            <>
-            <Table>
-              <TableHead>
-                <Tr>
-                  <Th>Name</Th>
-                  <Th>Email</Th>
-                  <Th>Role</Th>
-                  <Th>Status</Th>
-                  <Th className="hidden md:table-cell">Department</Th>
-                  <Th className="hidden lg:table-cell">Joined</Th>
-                  <Th className="text-right">Actions</Th>
-                </Tr>
-              </TableHead>
-              <TableBody>
-                {users.map((user) => (
-                  <Fragment key={user.id}>
-                  <Tr className={user.active ? undefined : 'opacity-60'}>
-                    <Td>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-semibold shrink-0">
-                          {user.name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="font-medium text-slate-900">{user.name}</span>
-                      </div>
-                    </Td>
-                    <Td className="text-slate-500 text-xs">{user.email}</Td>
-                    <Td><RoleBadge role={user.role} /></Td>
-                    <Td>
-                      {user.active ? (
-                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200" dot>
-                          Active
-                        </Badge>
-                      ) : (
-                        <Badge
-                          className="bg-slate-100 text-slate-500 border-slate-200"
-                          dot
-                        >
-                          Deactivated
-                        </Badge>
-                      )}
-                    </Td>
-                    <Td className="hidden md:table-cell text-slate-500 text-xs">
-                      {user.department}
-                    </Td>
-                    <Td className="hidden lg:table-cell text-slate-400 text-xs whitespace-nowrap">
-                      {formatDate(user.createdAt)}
-                    </Td>
-                    <Td className="text-right whitespace-nowrap">
-                      {user.active && editingId !== user.id && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => startEdit(user)}
-                          disabled={updatingId === user.id}
-                          leftIcon={<Pencil className="w-3.5 h-3.5" />}
-                        >
-                          Edit
-                        </Button>
-                      )}
-                      {user.id === currentUser?.id ? (
-                        <span className="text-xs text-slate-400 ml-2">You</span>
-                      ) : user.active ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeactivate(user)}
-                          isLoading={updatingId === user.id}
-                          leftIcon={<UserX className="w-3.5 h-3.5" />}
-                          className="text-red-500 hover:bg-red-50 hover:text-red-700"
-                        >
-                          Deactivate
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleReactivate(user)}
-                          isLoading={updatingId === user.id}
-                          leftIcon={<UserCheck className="w-3.5 h-3.5" />}
-                        >
-                          Reactivate
-                        </Button>
-                      )}
-                    </Td>
-                  </Tr>
-                  {editingId === user.id && (
-                    <tr className="bg-slate-50/70 border-b border-slate-100">
-                      <td colSpan={7} className="px-4 py-4">
-                        <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                          <div className="sm:w-56">
-                            <Select
-                              label="Role"
-                              value={editRole}
-                              onChange={(e) => setEditRole(e.target.value as Role)}
-                              options={ROLE_OPTIONS}
-                              error={editErrors.role}
-                              disabled={user.id === currentUser?.id || updatingId === user.id}
-                              hint={user.id === currentUser?.id ? 'You cannot change your own role' : undefined}
-                            />
-                          </div>
-                          <div className="sm:w-64">
-                            <Input
-                              label="Department"
-                              value={editDepartment}
-                              onChange={(e) => setEditDepartment(e.target.value)}
-                              maxLength={100}
-                              error={editErrors.department}
-                              disabled={updatingId === user.id}
-                            />
-                          </div>
-                          <div className="flex gap-2 sm:pt-6">
-                            <Button
-                              size="sm"
-                              onClick={() => handleSaveEdit(user)}
-                              isLoading={updatingId === user.id}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={cancelEdit}
-                              disabled={updatingId === user.id}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  </Fragment>
-                ))}
-              </TableBody>
-            </Table>
-            {result && (
-              <Pagination
-                page={result.page}
-                totalPages={result.totalPages}
-                totalElements={result.totalElements}
-                size={result.size}
-                itemLabel="users"
-                onPageChange={setPage}
-                disabled={isLoading}
-              />
+
+            {/* Below lg: cards keep every field readable without horizontal scrolling */}
+            <ul className="divide-y divide-line lg:hidden">
+              {users.map((u) => (
+                <li key={u.id} className={cn('px-4 py-4', u.id === me?.id && 'bg-accent-soft/30', !u.active && 'opacity-75')}>
+                  <UserCell user={u} isMe={u.id === me?.id} />
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <RoleBadge role={u.role} />
+                    <ActiveBadge user={u} />
+                    <Badge tone="neutral">{u.department}</Badge>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <RowActions
+                      user={u}
+                      isMe={u.id === me?.id}
+                      busy={busyId === u.id}
+                      onEdit={() => setEditing(u)}
+                      onDeactivate={() => {
+                        setDeactivateError(null);
+                        setDeactivating(u);
+                      }}
+                      onReactivate={() => reactivate(u)}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {result && users.length > 0 && (
+          <Pagination
+            page={result.page}
+            totalPages={result.totalPages}
+            totalElements={result.totalElements}
+            size={result.size}
+            itemLabel="users"
+            onPageChange={setPage}
+            disabled={isLoading}
+          />
+        )}
+      </Card>
+
+      {editing && (
+        <EditUserModal
+          user={editing}
+          isMe={editing.id === me?.id}
+          onClose={() => setEditing(null)}
+          onSaved={(updated, role, dept) => {
+            replaceUser(updated);
+            setEditing(null);
+            success('User updated', `${updated.name} is now ${ROLE_LABELS[role]} in ${dept}.`);
+          }}
+        />
+      )}
+
+      {deactivating && (
+        <ConfirmDialog
+          open
+          onOpenChange={(open) => !open && setDeactivating(null)}
+          title={`Deactivate ${deactivating.name}?`}
+          description="They will be signed out immediately and won't be able to sign in. Their tickets, comments and history are kept, and you can reactivate them later."
+          confirmLabel="Deactivate user"
+          tone="danger"
+          icon={<UserX />}
+          isLoading={busyId === deactivating.id}
+          onConfirm={confirmDeactivate}
+        >
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 rounded-lg border border-line bg-surface-2/60 p-3">
+              <Avatar name={deactivating.name} seed={deactivating.email} />
+              <div className="min-w-0">
+                <p className="truncate text-[13px] font-medium text-fg">{deactivating.email}</p>
+                <p className="text-xs text-fg-muted">
+                  {ROLE_LABELS[deactivating.role]} · {deactivating.department}
+                </p>
+              </div>
+            </div>
+            {deactivateError && (
+              <Alert tone="red" title="Not deactivated">
+                {deactivateError}
+              </Alert>
             )}
-            </>
-          )}
-        </Card>
+          </div>
+        </ConfirmDialog>
+      )}
+    </PageContainer>
+  );
+}
+
+// ─── Row pieces ──────────────────────────────────────────────────────────────
+
+function UserCell({ user, isMe }: { user: UserResponse; isMe: boolean }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <Avatar name={user.name} seed={user.email} />
+      <div className="min-w-0">
+        <p className="flex items-center gap-1.5 text-[13px] font-medium text-fg">
+          <span className="truncate">{user.name}</span>
+          {isMe && <Badge tone="accent">You</Badge>}
+        </p>
+        <p className="truncate text-xs text-fg-muted" title={user.email}>
+          {user.email}
+        </p>
       </div>
     </div>
   );
 }
 
+function ActiveBadge({ user }: { user: UserResponse }) {
+  return user.active ? (
+    <Badge tone="green" dot>
+      Active
+    </Badge>
+  ) : (
+    <Tooltip content={user.deactivatedAt ? `Deactivated ${formatDate(user.deactivatedAt)}` : 'Deactivated'}>
+      <span tabIndex={0}>
+        <Badge tone="neutral" dot>
+          Deactivated
+        </Badge>
+      </span>
+    </Tooltip>
+  );
+}
+
+function RowActions({
+  user,
+  isMe,
+  busy,
+  onEdit,
+  onDeactivate,
+  onReactivate,
+}: {
+  user: UserResponse;
+  isMe: boolean;
+  busy: boolean;
+  onEdit: () => void;
+  onDeactivate: () => void;
+  onReactivate: () => void;
+}) {
+  if (!user.active) {
+    return (
+      <div className="flex justify-end gap-1">
+        <Button variant="secondary" size="sm" isLoading={busy} leftIcon={<UserCheck className="size-3.5" />} onClick={onReactivate}>
+          Reactivate
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex justify-end gap-1">
+      <Button variant="ghost" size="sm" leftIcon={<Pencil className="size-3.5" />} onClick={onEdit} disabled={busy}>
+        Edit
+      </Button>
+      {isMe ? (
+        <Tooltip content="You can't deactivate your own account">
+          <span tabIndex={0}>
+            <Button variant="danger-soft" size="sm" leftIcon={<UserX className="size-3.5" />} disabled>
+              Deactivate
+            </Button>
+          </span>
+        </Tooltip>
+      ) : (
+        <Button variant="danger-soft" size="sm" leftIcon={<UserX className="size-3.5" />} onClick={onDeactivate} disabled={busy}>
+          Deactivate
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─── Edit modal ──────────────────────────────────────────────────────────────
+
+function EditUserModal({
+  user,
+  isMe,
+  onClose,
+  onSaved,
+}: {
+  user: UserResponse;
+  isMe: boolean;
+  onClose: () => void;
+  onSaved: (updated: UserResponse, role: Role, department: string) => void;
+}) {
+  const [role, setRole] = useState<Role>(user.role);
+  const [department, setDepartment] = useState(user.department);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [failure, setFailure] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const unchanged = role === user.role && department.trim() === user.department;
+
+  // The backend enforces admin-only access, the self / last-admin / open-ticket rules,
+  // and notifies the user of the change
+  const save = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const dept = department.trim();
+    if (dept.length < 2 || dept.length > 100) {
+      setErrors({ department: 'Department must be between 2 and 100 characters.' });
+      return;
+    }
+    setErrors({});
+    setFailure(null);
+    setSaving(true);
+    try {
+      onSaved(await userService.update(user.id, { role, department: dept }), role, dept);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      if (apiErr.fields) setErrors(apiErr.fields);
+      else setFailure(apiErr.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={`Edit ${user.name}`}
+      description={user.email}
+      icon={<ShieldCheck />}
+      busy={saving}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={() => save()} isLoading={saving} disabled={unchanged}>
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      <form onSubmit={save} className="space-y-4" noValidate>
+        {failure && (
+          <Alert tone="red" title="Changes not saved">
+            {failure}
+          </Alert>
+        )}
+        <Select
+          label="Role"
+          value={role}
+          onChange={(e) => setRole(e.target.value as Role)}
+          options={ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }))}
+          error={errors.role}
+          disabled={isMe || saving}
+          hint={isMe ? 'You cannot change your own role.' : ROLE_DESCRIPTIONS[role]}
+        />
+        <Input
+          label="Department"
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          maxLength={100}
+          error={errors.department}
+          disabled={saving}
+          hint="Managers and engineers work on tickets of their own department."
+        />
+        {user.role === 'SUPPORT_ENGINEER' && (
+          <Alert tone="blue">Engineers with open or in-progress assigned tickets must have them reassigned before their role or department changes.</Alert>
+        )}
+        <button type="submit" hidden />
+      </form>
+    </Modal>
+  );
+}

@@ -2,9 +2,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { notificationService } from '@/services/notification.service';
-import { NotificationResponse, NotificationType } from '@/types';
-import { formatNotificationTime, cn } from '@/utils';
 import {
   Bell,
   UserCheck,
@@ -15,87 +12,61 @@ import {
   Clock,
   AlertOctagon,
   Shield,
-  Building,
+  Building2,
   CheckCheck,
-  AlertCircle,
   Loader2,
+  BellOff,
+  ChevronRight,
 } from 'lucide-react';
+import { notificationService } from '@/services/notification.service';
+import { NotificationResponse, NotificationType } from '@/types';
+import { formatNotificationTime, cn, Tone, TONE_SOFT, plural } from '@/utils';
+import { useToast } from '@/components/ui/Toast';
+import { SegmentedControl } from '@/components/ui/Controls';
+import { ErrorState } from '@/components/ui/Feedback';
 
-interface TypeConfig {
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  bgColor: string;
-}
-
-const TYPE_CONFIG: Record<NotificationType, TypeConfig> = {
-  TICKET_ASSIGNED: {
-    icon: UserCheck,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-  },
-  TICKET_STATUS_CHANGED: {
-    icon: RefreshCw,
-    color: 'text-sky-600',
-    bgColor: 'bg-sky-50',
-  },
-  NEW_COMMENT: {
-    icon: MessageSquare,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-50',
-  },
-  TICKET_RESOLVED: {
-    icon: CheckCircle2,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-50',
-  },
-  TICKET_CLOSED: {
-    icon: Archive,
-    color: 'text-slate-600',
-    bgColor: 'bg-slate-100',
-  },
-  SLA_WARNING: {
-    icon: Clock,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-50',
-  },
-  SLA_BREACHED: {
-    icon: AlertOctagon,
-    color: 'text-red-600',
-    bgColor: 'bg-red-50',
-  },
-  USER_ROLE_CHANGED: {
-    icon: Shield,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-50',
-  },
-  USER_DEPARTMENT_CHANGED: {
-    icon: Building,
-    color: 'text-teal-600',
-    bgColor: 'bg-teal-50',
-  },
+const TYPE_CONFIG: Record<NotificationType, { icon: React.ComponentType<{ className?: string }>; tone: Tone }> = {
+  TICKET_ASSIGNED: { icon: UserCheck, tone: 'violet' },
+  TICKET_STATUS_CHANGED: { icon: RefreshCw, tone: 'blue' },
+  NEW_COMMENT: { icon: MessageSquare, tone: 'teal' },
+  TICKET_RESOLVED: { icon: CheckCircle2, tone: 'green' },
+  TICKET_CLOSED: { icon: Archive, tone: 'neutral' },
+  SLA_WARNING: { icon: Clock, tone: 'amber' },
+  SLA_BREACHED: { icon: AlertOctagon, tone: 'red' },
+  USER_ROLE_CHANGED: { icon: Shield, tone: 'accent' },
+  USER_DEPARTMENT_CHANGED: { icon: Building2, tone: 'blue' },
 };
 
+const DEFAULT_CONFIG = { icon: Bell, tone: 'neutral' as Tone };
 const PAGE_SIZE = 20;
+// Persistent notifications are polled (no WebSockets/SSE): the unread count refreshes every
+// minute while the tab is visible, the list loads when the panel opens
 const POLL_INTERVAL_MS = 60_000;
 
-const DEFAULT_CONFIG: TypeConfig = {
-  icon: Bell,
-  color: 'text-slate-600',
-  bgColor: 'bg-slate-100',
-};
+function targetOf(n: NotificationResponse): string | null {
+  if (n.entityType === 'TICKET' && n.entityId) return `/tickets/${n.entityId}`;
+  // Role/department changes concern the recipient's own account
+  if (n.entityType === 'USER') return '/account';
+  return null;
+}
 
 export function NotificationBell() {
   const router = useRouter();
+  const { info } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [nextPage, setNextPage] = useState<number | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const lastCount = useRef<number | null>(null);
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Unread count on load, then every minute while the tab is visible
   useEffect(() => {
@@ -105,12 +76,17 @@ export function NotificationBell() {
       notificationService
         .getUnreadCount()
         .then((res) => {
-          if (mounted) {
-            setUnreadCount(res.unreadCount);
+          if (!mounted) return;
+          // A gentle heads-up when the poll finds new notifications (not on first load)
+          if (lastCount.current !== null && res.unreadCount > lastCount.current) {
+            const added = res.unreadCount - lastCount.current;
+            info(`${plural(added, 'new notification')}`, 'Open the bell to see what changed.');
           }
+          lastCount.current = res.unreadCount;
+          setUnreadCount(res.unreadCount);
         })
         .catch(() => {
-          // The badge simply keeps its last value
+          // The badge keeps its last value
         });
     };
 
@@ -122,12 +98,16 @@ export function NotificationBell() {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', refreshCount);
     };
-  }, []);
+  }, [info]);
 
-  // The newest page of notifications and the unread count, when opened
+  const setCount = (count: number) => {
+    lastCount.current = count;
+    setUnreadCount(count);
+  };
+
   const loadNotifications = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
+    setError(false);
     try {
       const [page, countRes] = await Promise.all([
         notificationService.getPage({ size: PAGE_SIZE }),
@@ -135,9 +115,10 @@ export function NotificationBell() {
       ]);
       setNotifications(page.content);
       setNextPage(page.page + 1 < page.totalPages ? page.page + 1 : null);
+      lastCount.current = countRes.unreadCount;
       setUnreadCount(countRes.unreadCount);
     } catch {
-      setError('Unable to load notifications');
+      setError(true);
     } finally {
       setIsLoading(false);
     }
@@ -161,119 +142,114 @@ export function NotificationBell() {
     }
   };
 
-  // Popover toggle
-  const toggleDropdown = () => {
-    if (!isOpen) {
+  const close = useCallback((restoreFocus = true) => {
+    setIsOpen(false);
+    if (restoreFocus) buttonRef.current?.focus();
+  }, []);
+
+  const toggle = () => {
+    if (isOpen) {
+      close();
+    } else {
       setIsOpen(true);
       void loadNotifications();
-    } else {
-      setIsOpen(false);
     }
   };
 
-  // Close on outside click or Escape key
+  // Focus the panel when it opens; close on outside click or Escape
   useEffect(() => {
     if (!isOpen) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+    panelRef.current?.focus();
+    const onPointer = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false);
     };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
     };
-  }, [isOpen]);
+  }, [isOpen, close]);
 
-  // Mark single notification as read & navigate
-  const handleNotificationClick = async (notif: NotificationResponse) => {
-    if (!notif.read) {
-      // Optimistic local update
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-
+  const handleClick = async (n: NotificationResponse) => {
+    if (!n.read) {
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+      setCount(Math.max(0, unreadCount - 1));
       try {
-        await notificationService.markAsRead(notif.id);
+        await notificationService.markAsRead(n.id);
       } catch {
-        // Silently preserve local state
+        // Keeps the optimistic state; the next refresh corrects it
       }
     }
-
-    setIsOpen(false);
-
-    if (notif.entityType === 'TICKET' && notif.entityId) {
-      router.push(`/tickets/${notif.entityId}`);
-    }
+    const target = targetOf(n);
+    close(false);
+    if (target) router.push(target);
   };
 
-  // Mark all as read
   const handleMarkAllAsRead = async () => {
     if (unreadCount === 0 || isMarkingAll) return;
     setIsMarkingAll(true);
-
-    // Optimistic local update
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadCount(0);
-
+    setCount(0);
     try {
       await notificationService.markAllAsRead();
     } catch {
-      // Re-sync on failure
       void loadNotifications();
     } finally {
       setIsMarkingAll(false);
     }
   };
 
+  const shown = filter === 'unread' ? notifications.filter((n) => !n.read) : notifications;
+
   return (
-    <div className="relative inline-block text-left" ref={dropdownRef}>
-      {/* Bell Trigger Button */}
+    <div className="relative" ref={rootRef}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={toggleDropdown}
+        onClick={toggle}
         aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
         aria-expanded={isOpen}
+        aria-controls="notification-panel"
         className={cn(
-          'relative w-9 h-9 rounded-lg border flex items-center justify-center transition-all duration-150',
-          isOpen
-            ? 'bg-slate-100 border-slate-300 text-slate-900'
-            : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 shadow-sm'
+          'relative grid size-9 place-items-center rounded-lg border transition-[background-color,border-color,color,transform] duration-150 active:scale-95 cursor-pointer',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          isOpen ? 'border-line bg-surface-2 text-fg' : 'border-transparent text-fg-muted hover:bg-surface-2 hover:text-fg'
         )}
       >
-        <Bell className="w-4 h-4" />
+        <Bell className={cn('size-[18px]', unreadCount > 0 && !isOpen && 'origin-top motion-safe:animate-[bell_2.4s_ease-in-out_1]')} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none shadow-sm animate-fade-in">
+          <span
+            className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-canvas bg-red px-1 text-[10px] font-bold leading-none text-white tabular animate-pop"
+            aria-hidden
+          >
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
-      {/* Dropdown Popover */}
       {isOpen && (
         <div
+          id="notification-panel"
+          ref={panelRef}
+          tabIndex={-1}
           role="region"
-          aria-label="Notifications popover"
-          className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden animate-fade-in"
+          aria-label="Notifications"
+          className={cn(
+            'popover-motion fixed inset-x-3 top-[60px] z-50 overflow-hidden rounded-xl border border-line bg-surface shadow-xl focus:outline-none',
+            'sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[400px]'
+          )}
+          data-state="open"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-900 text-sm">Notifications</span>
+              <h2 className="text-sm font-semibold text-fg">Notifications</h2>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700 border border-brand-200">
-                  {unreadCount}
+                <span className="rounded-md bg-accent-soft px-1.5 py-0.5 text-[10.5px] font-semibold text-accent-soft-fg tabular">
+                  {unreadCount} new
                 </span>
               )}
             </div>
@@ -282,133 +258,106 @@ export function NotificationBell() {
                 type="button"
                 onClick={handleMarkAllAsRead}
                 disabled={isMarkingAll}
-                className="text-xs text-brand-600 hover:text-brand-700 font-medium inline-flex items-center gap-1 disabled:opacity-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-accent-soft-fg transition-colors hover:bg-accent-soft disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {isMarkingAll ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <CheckCheck className="w-3.5 h-3.5" />
-                )}
+                {isMarkingAll ? <Loader2 className="size-3 animate-spin" /> : <CheckCheck className="size-3.5" />}
                 Mark all as read
               </button>
             )}
           </div>
 
-          {/* Body */}
-          <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100">
+          <div className="border-b border-line px-4 py-2">
+            <SegmentedControl
+              label="Show notifications"
+              value={filter}
+              onChange={setFilter}
+              size="sm"
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'unread', label: 'Unread', count: unreadCount },
+              ]}
+            />
+          </div>
+
+          <div className="max-h-[min(440px,calc(100dvh-180px))] overflow-y-auto overscroll-contain">
             {isLoading ? (
-              // Loading Skeleton State
-              <div className="p-3 space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-start gap-3 p-2 rounded-lg">
-                    <div className="w-8 h-8 rounded-lg bg-slate-100 animate-pulse shrink-0" />
+              <div className="space-y-1 p-2" aria-label="Loading notifications" role="status">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex items-start gap-3 rounded-lg p-2.5">
+                    <div className="skeleton size-8 shrink-0 rounded-lg" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-3 w-3/4 bg-slate-100 animate-pulse rounded" />
-                      <div className="h-2.5 w-full bg-slate-100 animate-pulse rounded" />
-                      <div className="h-2 w-1/3 bg-slate-100 animate-pulse rounded" />
+                      <div className="skeleton h-3 w-3/4 rounded" />
+                      <div className="skeleton h-2.5 w-full rounded" />
+                      <div className="skeleton h-2 w-1/4 rounded" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : error ? (
-              // Error State
-              <div className="py-8 px-4 text-center">
-                <AlertCircle className="w-7 h-7 text-red-500 mx-auto mb-2" />
-                <p className="text-xs font-semibold text-slate-800">{error}</p>
-                <button
-                  type="button"
-                  onClick={loadNotifications}
-                  className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md transition-colors cursor-pointer"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Try again
-                </button>
-              </div>
-            ) : notifications.length === 0 ? (
-              // Empty State
-              <div className="py-10 px-4 text-center">
-                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 mx-auto mb-2.5 flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              <ErrorState title="Unable to load notifications" description="Check your connection and try again." onRetry={loadNotifications} />
+            ) : shown.length === 0 ? (
+              <div className="px-6 py-12 text-center">
+                <div className="mx-auto mb-3 grid size-11 place-items-center rounded-xl border border-line bg-surface-2 text-fg-subtle">
+                  {filter === 'unread' ? <CheckCheck className="size-5 text-green" /> : <BellOff className="size-5" />}
                 </div>
-                <p className="text-sm font-semibold text-slate-800">You&apos;re all caught up</p>
-                <p className="text-xs text-slate-500 mt-1">New notifications will appear here.</p>
+                <p className="text-sm font-semibold text-fg">You&apos;re all caught up</p>
+                <p className="mt-1 text-xs text-fg-muted">
+                  {filter === 'unread' ? 'No unread notifications.' : 'Assignments, status changes and SLA alerts will appear here.'}
+                </p>
               </div>
             ) : (
-              // Notification List
-              notifications.map((notif) => {
-                const config = TYPE_CONFIG[notif.type] || DEFAULT_CONFIG;
-                const Icon = config.icon;
-
-                return (
-                  <button
-                    key={notif.id}
-                    type="button"
-                    onClick={() => handleNotificationClick(notif)}
-                    className={cn(
-                      'w-full text-left p-3.5 flex items-start gap-3 transition-colors duration-150 cursor-pointer',
-                      !notif.read
-                        ? 'bg-brand-50/40 hover:bg-brand-50/70'
-                        : 'bg-white hover:bg-slate-50/80'
-                    )}
-                  >
-                    {/* Type Icon */}
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5',
-                        config.bgColor
-                      )}
-                    >
-                      <Icon className={cn('w-4 h-4', config.color)} />
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p
-                          className={cn(
-                            'text-xs truncate',
-                            !notif.read
-                              ? 'font-semibold text-slate-900'
-                              : 'font-medium text-slate-700'
-                          )}
-                        >
-                          {notif.title}
-                        </p>
-                        {!notif.read && (
-                          <span
-                            className="w-2 h-2 rounded-full bg-brand-600 shrink-0"
-                            title="Unread"
-                          />
-                        )}
-                      </div>
-                      <p
+              <ul className="divide-y divide-line">
+                {shown.map((n) => {
+                  const config = TYPE_CONFIG[n.type] || DEFAULT_CONFIG;
+                  const Icon = config.icon;
+                  const target = targetOf(n);
+                  return (
+                    <li key={n.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleClick(n)}
                         className={cn(
-                          'text-xs mt-0.5 line-clamp-2 leading-relaxed',
-                          !notif.read ? 'text-slate-600' : 'text-slate-500'
+                          'group relative flex w-full items-start gap-3 px-4 py-3 text-left transition-colors cursor-pointer',
+                          'focus-visible:outline-none focus-visible:bg-surface-2',
+                          n.read ? 'hover:bg-surface-2' : 'bg-accent-soft/35 hover:bg-accent-soft/60'
                         )}
                       >
-                        {notif.message}
-                      </p>
-                      <span className="text-[10px] text-slate-400 mt-1 block">
-                        {formatNotificationTime(notif.createdAt)}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })
+                        {!n.read && <span className="absolute left-1.5 top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-accent" aria-hidden />}
+                        <span className={cn('mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border', TONE_SOFT[config.tone])}>
+                          <Icon className="size-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className={cn('block text-[13px] leading-snug', n.read ? 'font-medium text-fg-muted' : 'font-semibold text-fg')}>
+                            {n.title}
+                            {!n.read && <span className="sr-only"> (unread)</span>}
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-relaxed text-fg-muted line-clamp-2 wrap-anywhere">{n.message}</span>
+                          <span className="mt-1 block text-[11px] text-fg-subtle">{formatNotificationTime(n.createdAt)}</span>
+                        </span>
+                        {target && (
+                          <ChevronRight className="mt-2 size-4 shrink-0 text-fg-subtle opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" aria-hidden />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-            {!isLoading && !error && nextPage !== null && (
+            {!isLoading && !error && nextPage !== null && filter === 'all' && (
               <button
                 type="button"
                 onClick={loadOlder}
                 disabled={isLoadingMore}
-                className="w-full py-2.5 text-xs font-medium text-brand-700 hover:bg-slate-50 disabled:opacity-50 inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex w-full items-center justify-center gap-1.5 border-t border-line py-2.5 text-xs font-medium text-accent-soft-fg transition-colors hover:bg-surface-2 disabled:opacity-50 cursor-pointer"
               >
-                {isLoadingMore && <Loader2 className="w-3 h-3 animate-spin" />}
+                {isLoadingMore && <Loader2 className="size-3 animate-spin" />}
                 Load older notifications
               </button>
             )}
           </div>
+          <p className="border-t border-line bg-surface-2/60 px-4 py-2 text-[11px] text-fg-subtle">
+            Unread count refreshes every minute while this tab is open.
+          </p>
         </div>
       )}
     </div>

@@ -20,6 +20,13 @@ export async function login(page: Page, user: E2eUser) {
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
+/** Signs out through the account menu (sidebar on desktop, top bar on small screens). */
+export async function signOut(page: Page) {
+  await page.getByRole('button', { name: /^Account menu for/ }).first().click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL(/\/login$/);
+}
+
 /** Collects console errors and CSP violations for the rest of the test. */
 export function watchConsole(page: Page) {
   const problems: string[] = [];

@@ -1,470 +1,373 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { Fragment, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Activity, AlertTriangle, Bot, RefreshCw, ScrollText, Search, ShieldCheck, Ticket as TicketIcon, UserCheck, UserRound, X } from 'lucide-react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { activityService } from '@/services/activity.service';
 import { ActivitySummary, AuditLogResponse, PageResponse } from '@/types';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { PageHeader } from '@/components/layout/Sidebar';
-import {
-  Card,
-  EmptyState,
-  Skeleton,
-  Table,
-  TableHead,
-  TableBody,
-  Th,
-  Tr,
-  Td,
-} from '@/components/ui/Card';
+import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/FormFields';
-import { useToast } from '@/components/ui/Toast';
-import { formatDate, formatRelative, cn } from '@/utils';
-import {
-  Activity,
-  AlertTriangle,
-  MessageSquare,
-  PlusCircle,
-  RefreshCw,
-  Search,
-  Ticket,
-  UserCheck,
-  Users,
-  Bot,
-  ChevronLeft,
-  ChevronRight,
-  Shield,
-} from 'lucide-react';
+import { Email } from '@/components/ui/Email';
+import { Avatar, AnimatedNumber } from '@/components/ui/Controls';
+import { EmptyState, ErrorState, SkeletonRows } from '@/components/ui/Feedback';
+import { Pagination } from '@/components/ui/Pagination';
+import { Table, Col, TableHead, TableBody, Th, Tr, Td } from '@/components/ui/Table';
+import { AUDIT_ACTIONS, auditAction, cn, formatDate, formatRelative, formatTime, Tone, TONE_SOFT } from '@/utils';
 
 const PAGE_SIZE = 25;
+const LONG_DETAILS = 220;
 
-const ACTION_FILTER_OPTIONS = [
-  { value: 'ALL', label: 'All Actions' },
-  { value: 'SLA_BREACHED', label: 'SLA Breached' },
-  { value: 'TICKET_STATUS_UPDATED', label: 'Status Updated' },
-  { value: 'TICKET_ASSIGNED', label: 'Ticket Assigned' },
-  { value: 'COMMENT_CREATED', label: 'Comment Added' },
-  { value: 'TICKET_CREATED', label: 'Ticket Created' },
-  { value: 'SLA_POLICY_UPDATED', label: 'SLA Policy Updated' },
-  { value: 'SLA_POLICY_TOGGLED', label: 'SLA Policy Toggled' },
-  { value: 'USER_ROLE_UPDATED', label: 'User Role Updated' },
-  { value: 'USER_DEPARTMENT_UPDATED', label: 'User Department Updated' },
-  { value: 'USER_DELETED', label: 'User Deleted' },
-];
+const DAY = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-function ActionBadge({ action }: { action: string }) {
-  switch (action) {
-    case 'SLA_BREACHED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-          SLA Breached
-        </span>
-      );
-    case 'TICKET_CREATED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-          <PlusCircle className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-          Created
-        </span>
-      );
-    case 'TICKET_STATUS_UPDATED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-          <RefreshCw className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-          Status Updated
-        </span>
-      );
-    case 'TICKET_ASSIGNED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
-          <UserCheck className="w-3.5 h-3.5 text-purple-500 shrink-0" />
-          Assigned
-        </span>
-      );
-    case 'COMMENT_CREATED':
-    case 'COMMENT_ADDED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200">
-          <MessageSquare className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-          Comment
-        </span>
-      );
-    case 'SLA_POLICY_UPDATED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-          <Shield className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-          SLA Updated
-        </span>
-      );
-    case 'SLA_POLICY_TOGGLED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-teal-50 text-teal-700 border border-teal-200">
-          <Shield className="w-3.5 h-3.5 text-teal-500 shrink-0" />
-          SLA Toggled
-        </span>
-      );
-    case 'USER_ROLE_UPDATED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-violet-50 text-violet-700 border border-violet-200">
-          <UserCheck className="w-3.5 h-3.5 text-violet-500 shrink-0" />
-          Role Updated
-        </span>
-      );
-    case 'USER_DEPARTMENT_UPDATED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-          <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-          Dept Updated
-        </span>
-      );
-    case 'USER_DELETED':
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200">
-          <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-          User Deleted
-        </span>
-      );
-    default:
-      return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-          <Activity className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-          {action.replace(/_/g, ' ')}
-        </span>
-      );
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return DAY.format(d);
+}
+
+// Groups consecutive (newest-first) entries by calendar day
+function byDay(logs: AuditLogResponse[]) {
+  const groups: { day: string; items: AuditLogResponse[] }[] = [];
+  for (const log of logs) {
+    const day = dayLabel(log.createdAt);
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.items.push(log);
+    else groups.push({ day, items: [log] });
   }
+  return groups;
 }
 
 export default function ActivityPage() {
   useRequireAuth({ allowedRoles: ['ADMIN'] });
 
   const [result, setResult] = useState<PageResponse<AuditLogResponse> | null>(null);
-  const [metrics, setMetrics] = useState<ActivitySummary>({
-    total: 0,
-    slaBreaches: 0,
-    statusChanges: 0,
-    assignments: 0,
-  });
+  const [metrics, setMetrics] = useState<ActivitySummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
-  const [actionFilter, setActionFilter] = useState('ALL');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [action, setAction] = useState('ALL');
+  const [page, setPage] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const debouncedSearch = useDebouncedValue(search.trim());
-  const { error } = useToast();
 
   // Search, filtering and paging happen on the server; the cards count every event
   useEffect(() => {
     let cancelled = false;
-
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading indicator for the new request
+    setIsLoading(true);
     Promise.all([
-      activityService.getPage({
-        page: currentPage - 1,
-        size: PAGE_SIZE,
-        action: actionFilter === 'ALL' ? undefined : actionFilter,
-        search: debouncedSearch || undefined,
-      }),
+      activityService.getPage({ page, size: PAGE_SIZE, action: action === 'ALL' ? undefined : action, search: debouncedSearch || undefined }),
       activityService.getSummary(),
     ])
-      .then(([page, summary]) => {
+      .then(([p, summary]) => {
         if (cancelled) return;
-        if (page.content.length === 0 && page.page > 0 && page.totalPages > 0) {
-          setCurrentPage(page.totalPages);
+        if (p.content.length === 0 && p.page > 0 && p.totalPages > 0) {
+          setPage(p.totalPages - 1);
           return;
         }
-        setResult(page);
+        setResult(p);
         setMetrics(summary);
+        setLoadError(false);
       })
-      .catch(() => {
-        if (!cancelled) {
-          error('Failed to load activity log', 'Please check your connection and try again.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-
+      .catch(() => !cancelled && setLoadError(true))
+      .finally(() => !cancelled && setIsLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [currentPage, actionFilter, debouncedSearch, reloadKey, error]);
+  }, [page, action, debouncedSearch, reloadKey]);
 
-  const fetchLogs = useCallback(() => {
-    setIsLoading(true);
-    setReloadKey((k) => k + 1);
-  }, []);
-
-  const handleSearchChange = (value: string) => {
-    setSearch(value);
-    setCurrentPage(1);
-  };
-
-  const handleActionFilterChange = (value: string) => {
-    setActionFilter(value);
-    setCurrentPage(1);
-  };
-
-  const handleResetFilters = () => {
+  const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
+  const reset = () => {
     setSearch('');
-    setActionFilter('ALL');
-    setCurrentPage(1);
+    setAction('ALL');
+    setPage(0);
   };
 
-  const paginatedLogs = result?.content ?? [];
-  const totalEvents = result?.totalElements ?? 0;
-  const totalPages = Math.max(result?.totalPages ?? 1, 1);
-  const safePage = (result?.page ?? 0) + 1;
+  const logs = result?.content ?? [];
+  const filtered = !!search || action !== 'ALL';
+  const groups = byDay(logs);
+
+  const cards: { label: string; value?: number; icon: React.ReactNode; tone: Tone; filter: string }[] = [
+    { label: 'Total events', value: metrics?.total, icon: <Activity />, tone: 'accent', filter: 'ALL' },
+    { label: 'SLA breaches', value: metrics?.slaBreaches, icon: <AlertTriangle />, tone: 'red', filter: 'SLA_BREACHED' },
+    { label: 'Status changes', value: metrics?.statusChanges, icon: <RefreshCw />, tone: 'amber', filter: 'TICKET_STATUS_UPDATED' },
+    { label: 'Assignments', value: metrics?.assignments, icon: <UserCheck />, tone: 'violet', filter: 'TICKET_ASSIGNED' },
+  ];
 
   return (
-    <div className="animate-fade-in pb-12">
+    <PageContainer>
       <PageHeader
         title="Audit Activity Log"
-        subtitle="System-wide audit trail of ticket events, assignments, status changes, and SLA alerts"
-        breadcrumb={[
-          { label: 'Dashboard', href: '/dashboard' },
-          { label: 'Activity' },
-        ]}
-        action={
-          <Button
-            variant="secondary"
-            size="md"
-            leftIcon={<RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />}
-            onClick={fetchLogs}
-            isLoading={isLoading}
-          >
+        subtitle="Every ticket, SLA, user and policy change, with who made it and when."
+        actions={
+          <Button variant="secondary" leftIcon={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />} onClick={refresh} disabled={isLoading}>
             Refresh
           </Button>
         }
       />
 
-      <div className="px-6 lg:px-8 py-6 space-y-6">
-        {/* Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-4 flex items-center justify-between border-slate-200">
-            <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Events</p>
-              <p className="text-2xl font-bold text-slate-900 mt-1">{metrics.total}</p>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Activity className="w-5 h-5" />
-            </div>
-          </Card>
+      <section aria-label="Activity summary" className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {cards.map((c, i) => {
+          const active = action === c.filter && c.filter !== 'ALL';
+          return (
+            <button
+              key={c.label}
+              type="button"
+              onClick={() => {
+                setAction(active ? 'ALL' : c.filter);
+                setPage(0);
+              }}
+              aria-pressed={active}
+              className={cn(
+                'stagger group flex items-center justify-between gap-3 rounded-xl border bg-surface p-4 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 cursor-pointer',
+                'hover:-translate-y-px hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                active ? 'border-accent ring-1 ring-accent' : 'border-line hover:border-line-strong'
+              )}
+              style={{ ['--i' as string]: i }}
+            >
+              <span>
+                <span className="block text-xs font-medium text-fg-muted">{c.label}</span>
+                <span className="mt-1 block text-2xl font-semibold text-fg">{c.value === undefined ? '–' : <AnimatedNumber value={c.value} />}</span>
+              </span>
+              <span className={cn('grid size-9 place-items-center rounded-lg border [&_svg]:size-4', TONE_SOFT[c.tone])} aria-hidden>
+                {c.icon}
+              </span>
+            </button>
+          );
+        })}
+      </section>
 
-          <Card className="p-4 flex items-center justify-between border-slate-200">
-            <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">SLA Breaches</p>
-              <p className="text-2xl font-bold text-red-600 mt-1">{metrics.slaBreaches}</p>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-          </Card>
+      <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <Input
+          placeholder="Search actor, ticket number, action or details…"
+          aria-label="Search activity"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(0);
+          }}
+          leftAddon={<Search />}
+          fieldClassName="sm:max-w-md"
+        />
+        <Select
+          aria-label="Filter by action"
+          selectSize="sm"
+          value={action}
+          onChange={(e) => {
+            setAction(e.target.value);
+            setPage(0);
+          }}
+          options={[{ value: 'ALL', label: 'All actions' }, ...AUDIT_ACTIONS.map((a) => ({ value: a.value, label: a.label }))]}
+          fieldClassName="sm:w-56"
+        />
+        {filtered && (
+          <Button variant="ghost" size="sm" leftIcon={<X className="size-3.5" />} onClick={reset}>
+            Reset
+          </Button>
+        )}
+      </div>
 
-          <Card className="p-4 flex items-center justify-between border-slate-200">
-            <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Status Changes</p>
-              <p className="text-2xl font-bold text-amber-600 mt-1">{metrics.statusChanges}</p>
+      {/* The layout responds to the card's own width, so collapsing the sidebar gives the table room */}
+      <Card padding="none" className="@container overflow-hidden">
+        {isLoading && !result ? (
+          <SkeletonRows rows={8} />
+        ) : loadError && !result ? (
+          <ErrorState title="Activity could not be loaded" onRetry={refresh} />
+        ) : logs.length === 0 ? (
+          <EmptyState
+            icon={<ScrollText />}
+            title="No activity events found"
+            description={filtered ? 'No events match your current filters.' : 'Events appear here as soon as tickets, users or policies change.'}
+            action={filtered ? <Button variant="secondary" size="sm" onClick={reset}>Clear filters</Button> : undefined}
+          />
+        ) : (
+          <div className={cn('transition-opacity', isLoading && 'opacity-60')} aria-busy={isLoading}>
+            {/* Wide: table with fixed columns; Details wraps, Timestamp keeps a stable width */}
+            <div className="hidden @[820px]:block">
+              <Table minWidth={820} caption="Audit events">
+                <colgroup>
+                  <Col width={168} />
+                  <Col width={136} />
+                  <Col width={236} />
+                  <Col />
+                  <Col width={128} />
+                </colgroup>
+                <TableHead>
+                  <tr>
+                    <Th>Action</Th>
+                    <Th>Entity</Th>
+                    <Th>Performed by</Th>
+                    <Th>Details</Th>
+                    <Th align="right">Time</Th>
+                  </tr>
+                </TableHead>
+                <TableBody>
+                  {groups.map((g) => (
+                    <Fragment key={g.day}>
+                      <tr>
+                        <th
+                          colSpan={5}
+                          scope="colgroup"
+                          className="border-b border-line bg-canvas/60 px-4 py-1.5 text-left text-[11px] font-semibold text-fg-muted"
+                        >
+                          {g.day}
+                        </th>
+                      </tr>
+                      {g.items.map((log) => (
+                        <Tr key={log.id}>
+                          <Td className="align-top"><ActionBadge action={log.action} /></Td>
+                          <Td className="align-top"><EntityLink log={log} /></Td>
+                          <Td className="align-top"><Actor who={log.performedBy} /></Td>
+                          <Td className="align-top"><Details text={log.details} /></Td>
+                          <Td align="right" className="align-top"><Timestamp iso={log.createdAt} /></Td>
+                        </Tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <RefreshCw className="w-5 h-5" />
-            </div>
-          </Card>
 
-          <Card className="p-4 flex items-center justify-between border-slate-200">
-            <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Assignments</p>
-              <p className="text-2xl font-bold text-purple-600 mt-1">{metrics.assignments}</p>
-            </div>
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-              <UserCheck className="w-5 h-5" />
-            </div>
-          </Card>
-        </div>
-
-        {/* Filter Controls */}
-        <Card className="p-4 border-slate-200">
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <div className="flex-1 w-full">
-              <Input
-                placeholder="Search by ticket #, user email, or details..."
-                aria-label="Search activity"
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                leftAddon={<Search className="w-4 h-4" />}
-              />
-            </div>
-            <div className="w-full sm:w-64">
-              <Select
-                options={ACTION_FILTER_OPTIONS}
-                aria-label="Filter by action"
-                value={actionFilter}
-                onChange={(e) => handleActionFilterChange(e.target.value)}
-              />
-            </div>
-            {(search || actionFilter !== 'ALL') && (
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={handleResetFilters}
-              >
-                Reset
-              </Button>
-            )}
-          </div>
-        </Card>
-
-        {/* Audit Log Table */}
-        <Card padding="none">
-          {isLoading && !result ? (
-            <div className="p-6 space-y-3">
-              {[...Array(6)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+            {/* Narrow: stacked entries */}
+            <div className="@[820px]:hidden">
+              {groups.map((g) => (
+                <section key={g.day} aria-label={g.day}>
+                  <h3 className="border-b border-line bg-canvas/60 px-4 py-1.5 text-[11px] font-semibold text-fg-muted">{g.day}</h3>
+                  <ul className="divide-y divide-line">
+                    {g.items.map((log) => (
+                      <li key={log.id} className="px-4 py-3.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <ActionBadge action={log.action} />
+                          <time dateTime={log.createdAt} className="text-[11.5px] text-fg-subtle tabular" title={formatDate(log.createdAt)}>
+                            {formatTime(log.createdAt)} · {formatRelative(log.createdAt)}
+                          </time>
+                        </div>
+                        <div className="mt-2"><Details text={log.details} /></div>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                          <EntityLink log={log} />
+                          <Actor who={log.performedBy} />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
             </div>
-          ) : paginatedLogs.length === 0 ? (
-            <EmptyState
-              icon={<Activity className="w-6 h-6" />}
-              title="No activity events found"
-              description={
-                search || actionFilter !== 'ALL'
-                  ? 'No events match your current filter criteria.'
-                  : 'System activity events will appear here once ticket actions occur.'
-              }
-              action={
-                search || actionFilter !== 'ALL' ? (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleResetFilters}
-                  >
-                    Clear Filters
-                  </Button>
-                ) : undefined
-              }
-            />
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHead>
-                    <Tr>
-                      <Th className="w-44">Action</Th>
-                      <Th className="w-36">Entity</Th>
-                      <Th className="w-56">Performed By</Th>
-                      <Th>Details</Th>
-                      <Th className="w-48 text-right">Timestamp</Th>
-                    </Tr>
-                  </TableHead>
-                  <TableBody>
-                    {paginatedLogs.map((log) => (
-                      <Tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
-                        <Td className="whitespace-nowrap">
-                          <ActionBadge action={log.action} />
-                        </Td>
-                        <Td className="whitespace-nowrap">
-                          {log.entityType === 'TICKET' ? (
-                            <Link
-                              href={`/tickets/${log.entityId}`}
-                              className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline group"
-                            >
-                              <Ticket className="w-3.5 h-3.5 text-blue-500 group-hover:text-blue-700 shrink-0" />
-                              <span>Ticket #{log.entityId}</span>
-                            </Link>
-                          ) : log.entityType === 'USER' ? (
-                            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-700">
-                              <Users className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                              <span>User #{log.entityId}</span>
-                            </span>
-                          ) : (
-                            <span className="text-sm font-medium text-slate-700">
-                              {log.entityType} #{log.entityId}
-                            </span>
-                          )}
-                        </Td>
-                        <Td className="whitespace-nowrap">
-                          {log.performedBy === 'SYSTEM' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                              <Bot className="w-3.5 h-3.5 text-slate-500" />
-                              SYSTEM
-                            </span>
-                          ) : (
-                            <span className="text-sm font-medium text-slate-900" title={log.performedBy}>
-                              {log.performedBy}
-                            </span>
-                          )}
-                        </Td>
-                        <Td>
-                          <span className="text-sm text-slate-600 leading-relaxed block max-w-xl truncate" title={log.details}>
-                            {log.details || '—'}
-                          </span>
-                        </Td>
-                        <Td className="whitespace-nowrap text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="text-sm font-medium text-slate-800">
-                              {formatRelative(log.createdAt)}
-                            </span>
-                            <span className="text-xs text-slate-400 font-mono">
-                              {formatDate(log.createdAt)}
-                            </span>
-                          </div>
-                        </Td>
-                      </Tr>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+          </div>
+        )}
+        {result && logs.length > 0 && (
+          <Pagination
+            page={result.page}
+            totalPages={result.totalPages}
+            totalElements={result.totalElements}
+            size={result.size}
+            itemLabel="events"
+            onPageChange={setPage}
+            disabled={isLoading}
+          />
+        )}
+      </Card>
+    </PageContainer>
+  );
+}
 
-              {/* Pagination footer */}
-              <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <p className="text-sm text-slate-500">
-                  Showing{' '}
-                  <span className="font-medium text-slate-900">
-                    {(safePage - 1) * PAGE_SIZE + 1}
-                  </span>{' '}
-                  to{' '}
-                  <span className="font-medium text-slate-900">
-                    {Math.min(safePage * PAGE_SIZE, totalEvents)}
-                  </span>{' '}
-                  of{' '}
-                  <span className="font-medium text-slate-900">
-                    {totalEvents}
-                  </span>{' '}
-                  events
-                </p>
+// ─── Cells ───────────────────────────────────────────────────────────────────
 
-                {totalPages > 1 && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      disabled={safePage === 1 || isLoading}
-                      leftIcon={<ChevronLeft className="w-4 h-4" />}
-                    >
-                      Previous
-                    </Button>
-                    <span className="text-sm text-slate-600 px-2 font-medium">
-                      Page {safePage} of {totalPages}
-                    </span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={safePage === totalPages || isLoading}
-                      rightIcon={<ChevronRight className="w-4 h-4" />}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </Card>
-      </div>
+function ActionBadge({ action }: { action: string }) {
+  const a = auditAction(action);
+  return (
+    <Badge tone={a.tone} dot title={action}>
+      {a.label}
+    </Badge>
+  );
+}
+
+function EntityLink({ log }: { log: AuditLogResponse }) {
+  const cls = 'inline-flex items-center gap-1.5 text-[13px] font-medium';
+  if (log.entityType === 'TICKET') {
+    return (
+      <Link href={`/tickets/${log.entityId}`} className={cn(cls, 'text-accent-soft-fg hover:underline focus-visible:outline-none focus-visible:underline')}>
+        <TicketIcon className="size-3.5 shrink-0" aria-hidden />
+        Ticket #{log.entityId}
+      </Link>
+    );
+  }
+  if (log.entityType === 'SLA_POLICY') {
+    return (
+      <Link href="/sla-policies" className={cn(cls, 'text-accent-soft-fg hover:underline')}>
+        <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
+        SLA policy #{log.entityId}
+      </Link>
+    );
+  }
+  if (log.entityType === 'USER') {
+    return (
+      <span className={cn(cls, 'text-fg')}>
+        <UserRound className="size-3.5 shrink-0 text-fg-subtle" aria-hidden />
+        User #{log.entityId}
+      </span>
+    );
+  }
+  return (
+    <span className={cn(cls, 'text-fg')}>
+      {log.entityType} #{log.entityId}
+    </span>
+  );
+}
+
+function Actor({ who }: { who: string }) {
+  if (who === 'SYSTEM') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-1.5 py-0.5 text-[11.5px] font-semibold text-fg-muted">
+        <Bot className="size-3.5" aria-hidden />
+        System
+      </span>
+    );
+  }
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <Avatar name={who} size="xs" />
+      <Email value={who} className="min-w-0 text-[12.5px] text-fg" />
+    </span>
+  );
+}
+
+// Long details are clamped with a toggle; nothing is hidden without a way to read it
+function Details({ text }: { text: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return <span className="text-fg-subtle">—</span>;
+  const long = text.length > LONG_DETAILS;
+  return (
+    <div>
+      <p className={cn('text-[13px] leading-relaxed text-fg-muted wrap-anywhere', long && !open && 'line-clamp-3')}>{text}</p>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="mt-1 text-xs font-medium text-accent-soft-fg hover:underline cursor-pointer"
+        >
+          {open ? 'Show less' : 'Show more'}
+        </button>
+      )}
     </div>
   );
 }
 
+function Timestamp({ iso }: { iso: string }) {
+  return (
+    <time dateTime={iso} title={formatDate(iso)} className="block whitespace-nowrap">
+      <span className="block text-[13px] font-medium text-fg tabular">{formatTime(iso)}</span>
+      <span className="block text-[11.5px] text-fg-subtle">{formatRelative(iso)}</span>
+    </time>
+  );
+}

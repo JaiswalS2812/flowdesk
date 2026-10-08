@@ -1,16 +1,8 @@
 'use client';
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  useEffect,
-} from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/utils';
-import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -29,8 +21,6 @@ interface ToastContextValue {
   info: (title: string, message?: string) => void;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function useToast() {
@@ -39,120 +29,121 @@ export function useToast() {
   return ctx;
 }
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
+const DURATION: Record<ToastType, number> = { success: 4500, info: 5000, warning: 7000, error: 8000 };
+const MAX_VISIBLE = 4;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-
-  const toast = useCallback((t: Omit<Toast, 'id'>) => {
-    const id = Math.random().toString(36).slice(2);
-    setToasts((prev) => [...prev, { ...t, id }]);
-  }, []);
-
-  const success = useCallback(
-    (title: string, message?: string) =>
-      toast({ type: 'success', title, message }),
-    [toast]
-  );
-  const error = useCallback(
-    (title: string, message?: string) =>
-      toast({ type: 'error', title, message }),
-    [toast]
-  );
-  const warning = useCallback(
-    (title: string, message?: string) =>
-      toast({ type: 'warning', title, message }),
-    [toast]
-  );
-  const info = useCallback(
-    (title: string, message?: string) =>
-      toast({ type: 'info', title, message }),
-    [toast]
-  );
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  const toast = useCallback((t: Omit<Toast, 'id'>) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev, { ...t, id }].slice(-MAX_VISIBLE));
+  }, []);
+
+  const value = useMemo<ToastContextValue>(
+    () => ({
+      toast,
+      success: (title, message) => toast({ type: 'success', title, message }),
+      error: (title, message) => toast({ type: 'error', title, message }),
+      warning: (title, message) => toast({ type: 'warning', title, message }),
+      info: (title, message) => toast({ type: 'info', title, message }),
+    }),
+    [toast]
+  );
+
   return (
-    <ToastContext.Provider value={{ toast, success, error, warning, info }}>
+    <ToastContext.Provider value={value}>
       {children}
-      <ToastContainer toasts={toasts} onDismiss={dismiss} />
+      {/* Errors are announced assertively, everything else politely */}
+      <div className="pointer-events-none fixed inset-x-4 bottom-[68px] z-[70] flex flex-col items-end gap-2 sm:inset-x-auto sm:right-5 sm:bottom-[76px]">
+        <div aria-live="polite" className="contents">
+          {toasts.filter((t) => t.type !== 'error').map((t) => (
+            <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
+          ))}
+        </div>
+        <div aria-live="assertive" className="contents">
+          {toasts.filter((t) => t.type === 'error').map((t) => (
+            <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
+          ))}
+        </div>
+      </div>
     </ToastContext.Provider>
   );
 }
 
-// ─── Toast item ───────────────────────────────────────────────────────────────
-
-const ICONS: Record<ToastType, React.ReactNode> = {
-  success: <CheckCircle className="w-4 h-4 text-green-600" />,
-  error: <XCircle className="w-4 h-4 text-red-600" />,
-  warning: <AlertTriangle className="w-4 h-4 text-amber-600" />,
-  info: <Info className="w-4 h-4 text-blue-600" />,
+const ICON: Record<ToastType, React.ReactNode> = {
+  success: <CheckCircle2 className="size-[18px] text-green" />,
+  error: <XCircle className="size-[18px] text-red" />,
+  warning: <AlertTriangle className="size-[18px] text-amber" />,
+  info: <Info className="size-[18px] text-blue" />,
 };
 
-const TOAST_STYLES: Record<ToastType, string> = {
-  success: 'border-green-200 bg-green-50',
-  error: 'border-red-200 bg-red-50',
-  warning: 'border-amber-200 bg-amber-50',
-  info: 'border-blue-200 bg-blue-50',
+const BAR: Record<ToastType, string> = {
+  success: 'bg-green',
+  error: 'bg-red',
+  warning: 'bg-amber',
+  info: 'bg-blue',
 };
 
-function ToastItem({
-  toast,
-  onDismiss,
-}: {
-  toast: Toast;
-  onDismiss: (id: string) => void;
-}) {
+function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
+  const [paused, setPaused] = useState(false);
+  const remaining = useRef(DURATION[toast.type]);
+  const started = useRef(0);
+
+  // Auto-dismiss, paused while hovered or focused so it can be read
   useEffect(() => {
-    const t = setTimeout(() => onDismiss(toast.id), 5000);
-    return () => clearTimeout(t);
-  }, [toast.id, onDismiss]);
+    if (paused) return;
+    started.current = Date.now();
+    const timer = setTimeout(() => onDismiss(toast.id), remaining.current);
+    return () => {
+      clearTimeout(timer);
+      remaining.current -= Date.now() - started.current;
+    };
+  }, [paused, toast.id, onDismiss]);
 
   return (
     <div
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
       className={cn(
-        'flex items-start gap-3 p-4 rounded-xl border shadow-lg shadow-black/5',
-        'animate-fade-in backdrop-blur-sm min-w-[300px] max-w-[420px]',
-        'bg-white/90',
-        TOAST_STYLES[toast.type]
+        'pointer-events-auto relative w-full overflow-hidden rounded-xl border border-line bg-surface shadow-lg sm:w-[360px]',
+        'animate-toast-in'
       )}
     >
-      <span className="mt-0.5 shrink-0">{ICONS[toast.type]}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-900">{toast.title}</p>
-        {toast.message && (
-          <p className="text-xs text-slate-600 mt-0.5">{toast.message}</p>
-        )}
+      <div className="flex items-start gap-3 px-4 py-3.5">
+        <span className="mt-px shrink-0" aria-hidden>
+          {ICON[toast.type]}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-fg">{toast.title}</p>
+          {toast.message && <p className="mt-0.5 text-xs leading-relaxed text-fg-muted wrap-anywhere">{toast.message}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => onDismiss(toast.id)}
+          className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+          aria-label="Dismiss notification"
+        >
+          <X className="size-3.5" />
+        </button>
       </div>
-      <button
-        onClick={() => onDismiss(toast.id)}
-        className="shrink-0 text-slate-400 hover:text-slate-600 transition-colors"
-        aria-label="Dismiss notification"
-      >
-        <X className="w-4 h-4" />
-      </button>
+      <span
+        className={cn('absolute bottom-0 left-0 h-0.5 origin-left', BAR[toast.type])}
+        style={{
+          width: '100%',
+          animation: `toast-progress ${DURATION[toast.type]}ms linear forwards`,
+          animationPlayState: paused ? 'paused' : 'running',
+          opacity: 0.55,
+        }}
+        aria-hidden
+      />
     </div>
   );
 }
-
-function ToastContainer({
-  toasts,
-  onDismiss,
-}: {
-  toasts: Toast[];
-  onDismiss: (id: string) => void;
-}) {
-  return (
-    <div
-      aria-live="assertive"
-      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 items-end"
-    >
-      {toasts.map((t) => (
-        <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
-      ))}
-    </div>
-  );
-}
-
