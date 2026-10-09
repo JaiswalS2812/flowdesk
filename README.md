@@ -49,7 +49,53 @@ to the backend over a private network.
 
 ---
 
-## 🖼️ Product Preview
+## 🖼️ Application Preview
+
+Screenshots of the running application (production build, desktop viewport). The data shown
+is synthetic test data from a local development database.
+
+### Sign in
+
+![FlowDesk sign-in page in the light theme: product highlights on the left, the email and password form on the right](docs/screenshots/login.png)
+
+The sign-in screen, with a summary of what FlowDesk does alongside the form.
+
+### Dashboard
+
+![Administrator dashboard showing ticket counts, a status breakdown, tickets by priority, tickets needing attention and recently updated tickets](docs/screenshots/dashboard.png)
+
+Role-scoped KPIs, status and priority breakdowns, SLA risks that need attention and the latest
+ticket activity.
+
+### Tickets
+
+![Tickets list with status tabs and counts, search, priority and sort filters, and a table of tickets with status, priority, assignee, SLA state and age](docs/screenshots/tickets.png)
+
+Status tabs with live counts, search and filters, and a sortable table showing each ticket's
+status, priority, assignee and SLA state.
+
+### Ticket details
+
+![Ticket detail page with workflow actions, a four-step progress tracker, the description, the conversation thread, SLA meters, ticket details, reassignment and a lifecycle timeline](docs/screenshots/ticket-details.png)
+
+Workflow actions, a progress tracker, the conversation thread, live SLA meters, assignment and
+a lifecycle timeline built from the ticket's own timestamps.
+
+### SLA policies
+
+![SLA Policies administration page with Low, Medium, High and Critical policy cards showing first-response and resolution targets](docs/screenshots/sla-policies.png)
+
+Administrators set first-response and resolution targets for each priority and can activate or
+deactivate a policy.
+
+### Dark theme
+
+![The dashboard in the dark theme](docs/screenshots/dark-theme.png)
+
+The same dashboard in the dark theme. Light, Dark, Warm and System themes are available from
+the top bar.
+
+### Every screen at a glance
 
 | Screen | What you'll find |
 |---|---|
