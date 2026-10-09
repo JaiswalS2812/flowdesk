@@ -1,13 +1,13 @@
 'use client';
 
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
-import { Input, PasswordInput } from '@/components/ui/FormFields';
+import { Input, PasswordInput, useFocusFirstError } from '@/components/ui/FormFields';
 import { Alert } from '@/components/ui/Feedback';
 import { ApiError } from '@/types';
 
@@ -29,6 +29,8 @@ function LoginForm() {
   const [form, setForm] = useState({ email: params.get('email') ?? '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusFirstError(formRef, fieldErrors);
   const [failure, setFailure] = useState<string | null>(null);
   const [showResetInfo, setShowResetInfo] = useState(false);
 
@@ -70,7 +72,7 @@ function LoginForm() {
   return (
     <div>
       <div className="mb-7">
-        <h2 className="text-2xl font-semibold tracking-tight text-fg">Sign in</h2>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Sign in</h1>
         <p className="mt-1.5 text-sm text-fg-muted">Welcome back. Enter your details to open your workspace.</p>
       </div>
 
@@ -80,7 +82,7 @@ function LoginForm() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Input
           label="Email address"
           type="email"

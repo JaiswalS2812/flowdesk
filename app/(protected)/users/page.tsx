@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pencil, RefreshCw, Search, UserCheck, Users, UserX, ShieldCheck } from 'lucide-react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { userService } from '@/services/user.service';
@@ -11,7 +11,7 @@ import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Input, Select } from '@/components/ui/FormFields';
+import { Input, Select, useFocusFirstError } from '@/components/ui/FormFields';
 import { Avatar, SegmentedControl } from '@/components/ui/Controls';
 import { Email } from '@/components/ui/Email';
 import { Alert, EmptyState, ErrorState, RefreshErrorAlert, SkeletonRows } from '@/components/ui/Feedback';
@@ -443,6 +443,8 @@ function EditUserModal({
   const [role, setRole] = useState<Role>(user.role);
   const [department, setDepartment] = useState(user.department);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusFirstError(formRef, errors);
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const unchanged = role === user.role && department.trim() === user.department;
@@ -488,7 +490,7 @@ function EditUserModal({
         </>
       }
     >
-      <form onSubmit={save} className="space-y-4" noValidate>
+      <form ref={formRef} onSubmit={save} className="space-y-4" noValidate>
         {failure && (
           <Alert tone="red" title="Changes not saved">
             {failure}

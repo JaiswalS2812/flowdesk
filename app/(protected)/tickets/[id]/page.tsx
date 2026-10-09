@@ -188,9 +188,12 @@ export default function TicketDetailPage() {
     }
   };
 
+  // The Clipboard API is missing on insecure origins and can be refused by the browser
   const copyLink = useCallback(() => {
-    void navigator.clipboard?.writeText(window.location.href).then(() => success('Link copied'));
-  }, [success]);
+    const failed = () => toastError('Link not copied', 'Copy the address from your browser’s address bar instead.');
+    if (!navigator.clipboard) return failed();
+    navigator.clipboard.writeText(window.location.href).then(() => success('Link copied'), failed);
+  }, [success, toastError]);
 
   if (state === 'loading') return <DetailSkeleton />;
   if (state !== 'ready' || !ticket) {
@@ -482,7 +485,8 @@ function WorkflowStepper({ status }: { status: TicketStatus }) {
   const current = steps.indexOf(status);
   return (
     <Card padding="none" className="overflow-x-auto">
-      <ol className="flex min-w-[520px] items-center px-5 py-4" aria-label="Workflow progress">
+      {/* Phones show every step but only the current step's name, so the row fits without scrolling */}
+      <ol className="flex items-center px-4 py-4 sm:min-w-[520px] sm:px-5" aria-label="Workflow progress">
         {steps.map((step, i) => {
           const done = !cancelled && i < current;
           const active = !cancelled && i === current;
@@ -499,12 +503,18 @@ function WorkflowStepper({ status }: { status: TicketStatus }) {
                 >
                   {done ? <Check className="size-3.5" strokeWidth={3} /> : i + 1}
                 </span>
-                <span className={cn('whitespace-nowrap text-[13px] font-medium', active ? 'text-fg' : done ? 'text-fg-muted' : 'text-fg-subtle')}>
+                <span
+                  className={cn(
+                    'whitespace-nowrap text-[13px] font-medium',
+                    !active && 'sr-only sm:not-sr-only',
+                    active ? 'text-fg' : done ? 'text-fg-muted' : 'text-fg-subtle'
+                  )}
+                >
                   {STATUS_LABELS[step]}
                 </span>
               </span>
               {i < steps.length - 1 && (
-                <span className="mx-3 h-0.5 flex-1 overflow-hidden rounded-full bg-line" aria-hidden>
+                <span className="mx-2 h-0.5 flex-1 overflow-hidden rounded-full bg-line sm:mx-3" aria-hidden>
                   <span className={cn('block h-full origin-left bg-accent transition-transform duration-700', done ? 'scale-x-100' : 'scale-x-0')} />
                 </span>
               )}

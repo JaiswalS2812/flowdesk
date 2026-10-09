@@ -9,7 +9,7 @@ export function Footer({ role }: { role?: Role }) {
   const product = [
     { label: 'Dashboard', href: '/dashboard' },
     { label: 'Tickets', href: '/tickets' },
-    ...(role && CAN_CREATE_TICKETS.includes(role) ? [{ label: 'New ticket', href: '/tickets/new' }] : []),
+    ...(role && CAN_CREATE_TICKETS.includes(role) ? [{ label: 'New Ticket', href: '/tickets/new' }] : []),
   ];
   const support = [
     { label: 'Help Center', href: '/help' },

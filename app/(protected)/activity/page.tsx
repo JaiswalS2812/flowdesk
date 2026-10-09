@@ -112,7 +112,7 @@ function ActivityView() {
   return (
     <PageContainer>
       <PageHeader
-        title="Audit Activity Log"
+        title="Activity Log"
         subtitle="Every ticket, SLA, user and policy change, with who made it and when."
         actions={
           <Button variant="secondary" leftIcon={<RefreshCw className={cn('size-4', isLoading && 'animate-spin')} />} onClick={refresh} disabled={isLoading}>

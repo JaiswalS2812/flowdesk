@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Building2,
@@ -20,7 +20,7 @@ import { ApiError, Role } from '@/types';
 import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { PasswordInput, PasswordChecklist, passwordChecks } from '@/components/ui/FormFields';
+import { PasswordInput, PasswordChecklist, passwordChecks, useFocusFirstError } from '@/components/ui/FormFields';
 import { Avatar } from '@/components/ui/Controls';
 import { Email } from '@/components/ui/Email';
 import { Alert } from '@/components/ui/Feedback';
@@ -51,6 +51,8 @@ export default function AccountPage() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusFirstError(formRef, fieldErrors);
   const [failure, setFailure] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -174,7 +176,7 @@ export default function AccountPage() {
                 {failure}
               </Alert>
             )}
-            <form onSubmit={handleSubmit} noValidate>
+            <form ref={formRef} onSubmit={handleSubmit} noValidate>
               <PasswordInput
                 label="Current password"
                 autoComplete="current-password"

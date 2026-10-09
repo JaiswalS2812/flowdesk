@@ -10,6 +10,7 @@ import { StatusBadge, PriorityBadge, SlaIndicator } from '@/components/tickets/B
 import { CAN_CREATE_TICKETS } from '@/components/layout/nav';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { answer, AssistantBlock, SUGGESTIONS } from '@/components/assistant/engine';
+import { announcePanelOpen, onOtherPanelOpen } from '@/lib/panels';
 
 interface Message {
   id: number;
@@ -85,8 +86,12 @@ export function Assistant() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, thinking]);
 
+  // On phones this panel and the notifications panel would overlap: only one stays open
+  useEffect(() => onOtherPanelOpen('assistant', () => setOpen(false)), []);
+
   useEffect(() => {
     if (!open) return;
+    announcePanelOpen('assistant');
     inputRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

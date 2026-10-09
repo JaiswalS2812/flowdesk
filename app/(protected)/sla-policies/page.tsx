@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Clock, Info, Pencil, RefreshCw, ShieldCheck, ShieldOff, Timer } from 'lucide-react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { slaPolicyService } from '@/services/sla-policy.service';
@@ -9,7 +9,7 @@ import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/FormFields';
+import { Input, useFocusFirstError } from '@/components/ui/FormFields';
 import { Switch } from '@/components/ui/Controls';
 import { Alert, ErrorState, RefreshErrorAlert, Skeleton } from '@/components/ui/Feedback';
 import { ConfirmDialog, Modal } from '@/components/ui/Dialog';
@@ -247,17 +247,22 @@ function EditPolicyModal({
   const [response, setResponse] = useState(String(policy.responseTimeMinutes));
   const [resolution, setResolution] = useState(String(policy.resolutionTimeMinutes));
   const [errors, setErrors] = useState<{ response?: string; resolution?: string }>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusFirstError(formRef, errors);
   const [failure, setFailure] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const r = Number(response);
   const res = Number(resolution);
   const valid = (n: number) => Number.isInteger(n) && n >= 1;
+  // Same convention as the Edit User dialog: nothing to save until a value changes
+  const unchanged = r === policy.responseTimeMinutes && res === policy.resolutionTimeMinutes;
 
   // Same limits as the backend (@Min(1)); a response target above the resolution target is
   // allowed but unusual, so it only warns
   const save = async (e?: React.FormEvent) => {
     e?.preventDefault();
+    if (unchanged) return; // Enter in a field submits the form too
     const errs: typeof errors = {};
     if (!valid(r)) errs.response = 'Enter a whole number of minutes (at least 1).';
     if (!valid(res)) errs.resolution = 'Enter a whole number of minutes (at least 1).';
@@ -287,13 +292,13 @@ function EditPolicyModal({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={() => save()} isLoading={saving}>
+          <Button onClick={() => save()} isLoading={saving} disabled={unchanged}>
             Save changes
           </Button>
         </>
       }
     >
-      <form onSubmit={save} className="space-y-4" noValidate>
+      <form ref={formRef} onSubmit={save} className="space-y-4" noValidate>
         {failure && (
           <Alert tone="red" title="Not saved">
             {failure}

@@ -19,6 +19,7 @@ import { ThemeMenu } from '@/components/layout/ThemeSwitcher';
 import { Footer } from '@/components/layout/Footer';
 import { breadcrumbsFor, isActive, navFor } from '@/components/layout/nav';
 import { UserResponse } from '@/types';
+import { useIsMac } from '@/hooks/useIsMac';
 
 // Loaded on first use: neither is needed for the first paint of a page
 const CommandPalette = dynamic(() => import('@/components/layout/CommandPalette').then((m) => m.CommandPalette), { ssr: false });
@@ -157,6 +158,7 @@ function SidebarContent({
   // On desktop the collapsed look is driven by the html attribute (no flash on load), so
   // `collapsed:` classes apply only when not rendering the mobile drawer
   const sections = navFor(user?.role);
+  const mod = useIsMac() ? '⌘' : 'Ctrl'; // the shortcuts accept both Ctrl and ⌘
 
   return (
     <>
@@ -172,7 +174,7 @@ function SidebarContent({
       </div>
 
       <div className={cn('px-3 pb-2', !mobile && 'collapsed:px-2.5')}>
-        <Tooltip content={<span>Search & commands <span className="opacity-60">Ctrl K</span></span>} side="right" disabled={!collapsed || mobile}>
+        <Tooltip content={<span>Search & commands <span className="opacity-60">{mod} K</span></span>} side="right" disabled={!collapsed || mobile}>
           <button
             type="button"
             onClick={onSearch}
@@ -186,7 +188,7 @@ function SidebarContent({
             <Search className="size-4 shrink-0" aria-hidden />
             <span className={cn('flex-1 text-left', !mobile && 'collapsed:hidden')}>Search…</span>
             <span className={cn('flex gap-0.5', !mobile && 'collapsed:hidden')} aria-hidden>
-              <Kbd>Ctrl</Kbd>
+              <Kbd>{mod}</Kbd>
               <Kbd>K</Kbd>
             </span>
           </button>
@@ -246,7 +248,7 @@ function SidebarContent({
             onClick={onToggle}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             aria-expanded={!collapsed}
-            title={collapsed ? 'Expand sidebar (Ctrl \\)' : 'Collapse sidebar (Ctrl \\)'}
+            title={collapsed ? `Expand sidebar (${mod} \\)` : `Collapse sidebar (${mod} \\)`}
             className={cn(
               'mt-1 flex h-8 w-full items-center gap-2.5 rounded-lg px-2.5 text-xs font-medium text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg cursor-pointer',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring collapsed:justify-center collapsed:px-0'

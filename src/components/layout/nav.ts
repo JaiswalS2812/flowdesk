@@ -70,7 +70,7 @@ export function isActive(pathname: string, href: string): boolean {
 export function breadcrumbsFor(pathname: string): { label: string; href?: string }[] {
   const ticket = pathname.match(/^\/tickets\/(\d+)/);
   if (ticket) return [{ label: 'Tickets', href: '/tickets' }, { label: `#${ticket[1]}` }];
-  if (pathname === '/tickets/new') return [{ label: 'Tickets', href: '/tickets' }, { label: 'New ticket' }];
+  if (pathname === '/tickets/new') return [{ label: 'Tickets', href: '/tickets' }, { label: 'New Ticket' }];
   for (const section of NAV_SECTIONS) {
     const item = section.items.find((i) => i.href === pathname);
     if (item) {

@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BellRing, BookOpen, ChevronDown, Compass, KeyRound, LifeBuoy, Search, Settings2, SquarePen, Timer, Workflow, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useIsMac } from '@/hooks/useIsMac';
 import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/FormFields';
@@ -25,6 +26,7 @@ const CATEGORY_ICON: Record<HelpCategory, React.ReactNode> = {
 
 export default function HelpPage() {
   const { user } = useAuth();
+  const isMac = useIsMac();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<HelpCategory | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export default function HelpPage() {
         <div className="relative max-w-xl">
           <h2 className="text-lg font-semibold tracking-tight text-fg">What do you need help with?</h2>
           <p className="mt-1 text-[13px] text-fg-muted">
-            Search the guides below, or press <Kbd>Ctrl</Kbd> <Kbd>K</Kbd> anywhere to jump to a ticket or page.
+            Search the guides below, or press <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd> <Kbd>K</Kbd> anywhere to jump to a ticket or page.
           </p>
           <Input
             aria-label="Search help articles"

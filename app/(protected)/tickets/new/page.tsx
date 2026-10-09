@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Bell, Building2, Clock, Send, UserCheck } from 'lucide-react';
@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button, buttonClasses } from '@/components/ui/Button';
-import { Input, Textarea } from '@/components/ui/FormFields';
+import { Input, Textarea, useFocusFirstError } from '@/components/ui/FormFields';
 import { Alert } from '@/components/ui/Feedback';
 import { useToast } from '@/components/ui/Toast';
 import { cn, PRIORITIES, PRIORITY_DESCRIPTIONS, PRIORITY_LABELS, PRIORITY_TONE, TONE_SOFT, TONE_SOLID } from '@/utils';
@@ -26,6 +26,8 @@ export default function NewTicketPage() {
 
   const [form, setForm] = useState({ title: '', description: '', priority: 'MEDIUM' as TicketPriority });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusFirstError(formRef, fieldErrors);
   const [failure, setFailure] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -82,7 +84,7 @@ export default function NewTicketPage() {
               {failure}
             </Alert>
           )}
-          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
             <Input
               label="Title"
               placeholder="e.g. VPN disconnects every 20 minutes"
@@ -159,7 +161,7 @@ export default function NewTicketPage() {
                 Filed under your department: <span className="font-medium text-fg">{user?.department}</span>
               </p>
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => router.back()} disabled={isLoading}>
+                <Button variant="secondary" onClick={() => router.push('/tickets')} disabled={isLoading}>
                   Cancel
                 </Button>
                 <Button type="submit" isLoading={isLoading} leftIcon={<Send className="size-4" />} className="min-w-[150px]">

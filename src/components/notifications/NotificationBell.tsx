@@ -24,6 +24,7 @@ import { formatNotificationTime, cn, Tone, TONE_SOFT, plural } from '@/utils';
 import { useToast } from '@/components/ui/Toast';
 import { SegmentedControl } from '@/components/ui/Controls';
 import { ErrorState } from '@/components/ui/Feedback';
+import { announcePanelOpen, onOtherPanelOpen } from '@/lib/panels';
 
 const TYPE_CONFIG: Record<NotificationType, { icon: React.ComponentType<{ className?: string }>; tone: Tone }> = {
   TICKET_ASSIGNED: { icon: UserCheck, tone: 'violet' },
@@ -52,7 +53,7 @@ function targetOf(n: NotificationResponse): string | null {
 
 export function NotificationBell() {
   const router = useRouter();
-  const { info } = useToast();
+  const { info, error: toastError } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
@@ -156,9 +157,13 @@ export function NotificationBell() {
     }
   };
 
+  // On phones the assistant and this panel would overlap: only one stays open
+  useEffect(() => onOtherPanelOpen('notifications', () => close(false)), [close]);
+
   // Focus the panel when it opens; close on outside click or Escape
   useEffect(() => {
     if (!isOpen) return;
+    announcePanelOpen('notifications');
     panelRef.current?.focus();
     const onPointer = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false);
@@ -197,6 +202,8 @@ export function NotificationBell() {
     try {
       await notificationService.markAllAsRead();
     } catch {
+      // Reload restores the real read state that the optimistic update replaced
+      toastError('Notifications not marked as read', 'Your connection may have dropped. Please try again.');
       void loadNotifications();
     } finally {
       setIsMarkingAll(false);
@@ -223,7 +230,7 @@ export function NotificationBell() {
         <Bell className={cn('size-[18px]', unreadCount > 0 && !isOpen && 'origin-top motion-safe:animate-[bell_2.4s_ease-in-out_1]')} />
         {unreadCount > 0 && (
           <span
-            className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-canvas bg-red px-1 text-[10px] font-bold leading-none text-white tabular animate-pop"
+            className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-canvas bg-danger px-1 text-[10px] font-bold leading-none text-white tabular animate-pop"
             aria-hidden
           >
             {unreadCount > 99 ? '99+' : unreadCount}

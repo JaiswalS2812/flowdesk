@@ -39,11 +39,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <div className="relative">
-          <h1 className="text-[34px] font-semibold leading-[1.15] tracking-tight text-fg animate-enter" style={{ animationDelay: '80ms' }}>
+          <p className="text-[34px] font-semibold leading-[1.15] tracking-tight text-fg animate-enter" style={{ animationDelay: '80ms' }}>
             Every request,
             <br />
             <span className="bg-gradient-to-r from-accent to-violet bg-clip-text text-transparent">tracked to resolution.</span>
-          </h1>
+          </p>
           <p className="mt-4 max-w-md text-[15px] leading-relaxed text-fg-muted animate-enter" style={{ animationDelay: '140ms' }}>
             FlowDesk gives internal support teams one place to raise, route and resolve service requests, with SLAs
             that escalate on their own.

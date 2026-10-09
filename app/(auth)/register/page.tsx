@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Building2, Check, Mail, UserRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { Button, buttonClasses } from '@/components/ui/Button';
-import { Input, PasswordInput, PasswordChecklist, passwordChecks } from '@/components/ui/FormFields';
+import { Input, PasswordInput, PasswordChecklist, passwordChecks, useFocusFirstError } from '@/components/ui/FormFields';
 import { Alert } from '@/components/ui/Feedback';
 import { ApiError } from '@/types';
 
@@ -18,6 +18,8 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [registered, setRegistered] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusFirstError(formRef, fieldErrors);
   const [failure, setFailure] = useState<string | null>(null);
 
   const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -70,7 +72,7 @@ export default function RegisterPage() {
             <Check className="size-8" strokeWidth={2.5} />
           </span>
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight text-fg">You&apos;re all set</h2>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">You&apos;re all set</h1>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-muted">
           Your account <span className="font-medium text-fg">{registered}</span> was created as an Employee. An
           administrator can grant other roles when you need them.
@@ -86,7 +88,7 @@ export default function RegisterPage() {
   return (
     <div>
       <div className="mb-7">
-        <h2 className="text-2xl font-semibold tracking-tight text-fg">Create your account</h2>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Create your account</h1>
         <p className="mt-1.5 text-sm text-fg-muted">Join your team&apos;s FlowDesk workspace to raise and track requests.</p>
       </div>
 
@@ -96,7 +98,7 @@ export default function RegisterPage() {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Input
           label="Full name"
           placeholder="Jane Smith"

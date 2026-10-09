@@ -44,6 +44,9 @@
   --color-accent-line: var(--accent-line);
   --color-ring: var(--ring);
 
+  /* Solid fill behind white text on destructive buttons (readable in every theme) */
+  --color-danger: var(--danger);
+
   /* Tones: <tone>-bg (soft fill), <tone>-fg (text on soft fill), <tone>-line, <tone> (solid) */
   --color-neutral: var(--neutral);
   --color-neutral-bg: var(--neutral-bg);
@@ -148,6 +151,7 @@
   --orange: #ea580c;  --orange-bg: #fdefe6;  --orange-fg: #b03f08;  --orange-line: #f8cfb4;
   --red: #dc2626;     --red-bg: #fdecec;     --red-fg: #b41c1c;     --red-line: #f6c9c9;
   --rose: #e11d48;    --rose-bg: #fdebf0;    --rose-fg: #b3133a;    --rose-line: #f7c6d3;
+  --danger: var(--red);
 
   --elev-xs: 0 1px 1px rgb(16 24 40 / 0.04);
   --elev-sm: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 1px rgb(16 24 40 / 0.03);
@@ -196,6 +200,7 @@
   --orange: #f78a4a;  --orange-bg: rgb(247 138 74 / 0.15);  --orange-fg: #fbb68c;  --orange-line: rgb(247 138 74 / 0.34);
   --red: #f26464;     --red-bg: rgb(242 100 100 / 0.15);    --red-fg: #fda4a4;     --red-line: rgb(242 100 100 / 0.36);
   --rose: #f2618a;    --rose-bg: rgb(242 97 138 / 0.15);    --rose-fg: #fca3bd;    --rose-line: rgb(242 97 138 / 0.34);
+  --danger: #cc4343; /* deeper than --red so white text reaches 4.5:1 */
 
   --elev-xs: 0 1px 1px rgb(0 0 0 / 0.3);
   --elev-sm: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -246,6 +251,7 @@
   --orange: #c05a1e;  --orange-bg: #f6e2d2;  --orange-fg: #94420f;  --orange-line: #ecc5a6;
   --red: #b83a2e;     --red-bg: #f5dfd9;     --red-fg: #962c22;     --red-line: #e9bfb5;
   --rose: #ad3a5b;    --rose-bg: #f3e0e2;    --rose-fg: #8d2b47;    --rose-line: #e5c0c8;
+  --danger: var(--red);
 
   --elev-xs: 0 1px 1px rgb(74 52 30 / 0.05);
   --elev-sm: 0 1px 2px rgb(74 52 30 / 0.08), 0 1px 1px rgb(74 52 30 / 0.04);

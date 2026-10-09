@@ -43,6 +43,15 @@ function apply(theme: Theme, animate: boolean) {
     window.setTimeout(() => root.classList.remove('theme-transition'), 320);
   }
   root.setAttribute('data-theme', theme);
+  syncThemeColor();
+}
+
+// The viewport theme-color tags follow only the OS scheme (app/layout.tsx); point them at the
+// applied theme's canvas so the mobile browser bar matches a chosen Light, Dark or Warm theme
+function syncThemeColor() {
+  const canvas = getComputedStyle(document.documentElement).getPropertyValue('--canvas').trim();
+  if (!canvas) return;
+  document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute('content', canvas));
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -57,6 +66,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setPreferenceState(pref);
     setTheme(pref === 'system' ? systemTheme() : pref);
     /* eslint-enable react-hooks/set-state-in-effect */
+    syncThemeColor(); // the init script already applied the theme before paint
   }, []);
 
   // Follow OS changes while the preference is "system"

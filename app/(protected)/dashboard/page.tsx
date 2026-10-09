@@ -146,7 +146,7 @@ export default function DashboardPage() {
             {canCreate && (
               <Link href="/tickets/new" className={buttonClasses('primary', 'md')}>
                 <SquarePen className="size-4" />
-                New ticket
+                New Ticket
               </Link>
             )}
           </>
@@ -464,7 +464,7 @@ function RecentTickets({
           action={
             canCreate ? (
               <Link href="/tickets/new" className={buttonClasses('primary', 'sm')}>
-                <SquarePen className="size-3.5" /> New ticket
+                <SquarePen className="size-3.5" /> New Ticket
               </Link>
             ) : undefined
           }
@@ -513,7 +513,7 @@ function RecentActivity({ events, loading }: { events?: AuditLogResponse[] | nul
           icon={<ScrollText />}
           action={
             <Link href="/activity" className={buttonClasses('ghost', 'xs')}>
-              Audit log <ArrowRight className="size-3" />
+              Activity Log <ArrowRight className="size-3" />
             </Link>
           }
           className="mb-3"
@@ -569,7 +569,13 @@ function QuickActions({ role, canCreate, wide }: { role: Role; canCreate: boolea
   return (
     <Card className={wide ? 'xl:col-span-5' : 'xl:col-span-2'}>
       <CardHeader title="Quick actions" />
-      <ul className={cn('grid gap-2', wide ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 xl:grid-cols-1')}>
+      {/* Employees and engineers see three actions: three columns, so no row is left half empty */}
+      <ul
+        className={cn(
+          'grid gap-2',
+          !wide ? 'sm:grid-cols-2 xl:grid-cols-1' : actions.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'
+        )}
+      >
         {actions.map((a, i) => (
           <li key={a.href} className="stagger" style={{ ['--i' as string]: i }}>
             <Link

@@ -21,7 +21,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
     'bg-surface text-fg border-line shadow-xs hover:bg-surface-2 hover:border-line-strong',
   ghost: 'bg-transparent text-fg-muted border-transparent hover:bg-surface-2 hover:text-fg',
   outline: 'bg-transparent text-accent-soft-fg border-accent-line hover:bg-accent-soft',
-  danger: 'bg-red text-white border-transparent shadow-sm hover:brightness-95',
+  danger: 'bg-danger text-white border-transparent shadow-sm hover:brightness-95',
   'danger-soft': 'bg-transparent text-red-fg border-transparent hover:bg-red-bg',
 };
 

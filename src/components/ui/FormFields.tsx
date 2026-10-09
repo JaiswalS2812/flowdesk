@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useId, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { AlertCircle, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/utils';
 
@@ -47,8 +47,10 @@ export function Field({ id, label, required, hint, error, counter, className, ch
       {children}
       {(error || hint || counter) && (
         <div className="mt-1.5 flex items-start justify-between gap-3 text-xs">
+          {/* Not a live region: forms move focus to the first invalid field (useFocusFirstError),
+              which reads its label and this error once instead of announcing every error at once */}
           {error ? (
-            <p id={`${id}-error`} className="flex items-start gap-1 text-red-fg" role="alert">
+            <p id={`${id}-error`} className="flex items-start gap-1 text-red-fg">
               <AlertCircle className="size-3.5 shrink-0 mt-px" aria-hidden />
               {error}
             </p>
@@ -60,14 +62,29 @@ export function Field({ id, label, required, hint, error, counter, className, ch
             <span />
           )}
           {counter && (
-            <span className={cn('tabular shrink-0', near ? 'text-amber-fg' : 'text-fg-subtle')} aria-live="polite">
+            <span className={cn('tabular shrink-0', near ? 'text-amber-fg' : 'text-fg-subtle')} aria-hidden>
               {counter.value.toLocaleString()} / {counter.max.toLocaleString()}
+            </span>
+          )}
+          {/* Screen readers hear the count only close to the limit, not on every keystroke */}
+          {counter && (
+            <span className="sr-only" aria-live="polite">
+              {near ? `${(counter.max - counter.value).toLocaleString()} characters left` : ''}
             </span>
           )}
         </div>
       )}
     </div>
   );
+}
+
+// After a submit produces errors, focus the first invalid control so assistive technology reads
+// its label and error. Pass the error object as set by the form: each new object refocuses.
+export function useFocusFirstError(formRef: React.RefObject<HTMLFormElement | null>, errors: object) {
+  useEffect(() => {
+    if (Object.keys(errors).length === 0) return;
+    formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [formRef, errors]);
 }
 
 function describedBy(id: string, error?: string, hint?: React.ReactNode) {
