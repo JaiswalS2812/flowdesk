@@ -12,10 +12,14 @@ interface UseRequireAuthOptions {
 /**
  * Redirects to /login if not authenticated.
  * If allowedRoles is provided, also redirects to /dashboard if role not allowed.
+ * `isAuthorized` is true only once the session is resolved and the role is allowed, so pages
+ * can hold back their content (and its requests) until then.
  */
 export function useRequireAuth(options: UseRequireAuthOptions = {}) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
+  const { allowedRoles } = options;
+  const roleAllowed = !allowedRoles || (!!user && allowedRoles.includes(user.role));
 
   useEffect(() => {
     if (isLoading) return;
@@ -25,15 +29,10 @@ export function useRequireAuth(options: UseRequireAuthOptions = {}) {
       return;
     }
 
-    if (
-      options.allowedRoles &&
-      user &&
-      !options.allowedRoles.includes(user.role)
-    ) {
+    if (!roleAllowed) {
       router.replace('/dashboard');
     }
-  }, [isAuthenticated, isLoading, user, router, options.allowedRoles]);
+  }, [isAuthenticated, isLoading, roleAllowed, router]);
 
-  return { isLoading, user, isAuthenticated };
+  return { isLoading, user, isAuthenticated, isAuthorized: !isLoading && isAuthenticated && roleAllowed };
 }
-

@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/FormFields';
 import { Avatar, SegmentedControl } from '@/components/ui/Controls';
 import { Email } from '@/components/ui/Email';
-import { Alert, EmptyState, ErrorState, SkeletonRows } from '@/components/ui/Feedback';
+import { Alert, EmptyState, ErrorState, RefreshErrorAlert, SkeletonRows } from '@/components/ui/Feedback';
 import { ConfirmDialog, Modal } from '@/components/ui/Dialog';
 import { Pagination } from '@/components/ui/Pagination';
 import { Table, Col, TableHead, TableBody, Th, Tr, Td } from '@/components/ui/Table';
@@ -26,8 +26,15 @@ import { cn, formatDate, formatShortDate, ROLE_DESCRIPTIONS, ROLE_LABELS, ROLES 
 const PAGE_SIZE = 20;
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
+const ADMIN_ONLY: Role[] = ['ADMIN'];
+
+// Nothing renders (and nothing is requested) until the session is resolved as an admin's
 export default function UsersPage() {
-  useRequireAuth({ allowedRoles: ['ADMIN'] });
+  const { isAuthorized } = useRequireAuth({ allowedRoles: ADMIN_ONLY });
+  return isAuthorized ? <UsersView /> : null;
+}
+
+function UsersView() {
   const { user: me } = useAuth();
   const { success, error } = useToast();
 
@@ -175,6 +182,15 @@ export default function UsersPage() {
           ]}
         />
       </div>
+
+      {loadError && result && (
+        <RefreshErrorAlert
+          className="mb-4"
+          description="The users and counts below are from an earlier request and may not match your current search, filter or page."
+          onRetry={refresh}
+          retrying={isLoading}
+        />
+      )}
 
       <Card padding="none" className="@container overflow-hidden">
         {isLoading && !result ? (

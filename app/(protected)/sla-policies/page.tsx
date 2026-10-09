@@ -4,21 +4,28 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Clock, Info, Pencil, RefreshCw, ShieldCheck, ShieldOff, Timer } from 'lucide-react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { slaPolicyService } from '@/services/sla-policy.service';
-import { ApiError, SlaPolicyResponse } from '@/types';
+import { ApiError, Role, SlaPolicyResponse } from '@/types';
 import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/FormFields';
 import { Switch } from '@/components/ui/Controls';
-import { Alert, ErrorState, Skeleton } from '@/components/ui/Feedback';
+import { Alert, ErrorState, RefreshErrorAlert, Skeleton } from '@/components/ui/Feedback';
 import { ConfirmDialog, Modal } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
 import { PriorityBadge } from '@/components/tickets/Badges';
 import { cn, formatMinutes, PRIORITY_LABELS, PRIORITY_TONE, TONE_SOFT, TONE_SOLID, Tone } from '@/utils';
 
+const ADMIN_ONLY: Role[] = ['ADMIN'];
+
+// Nothing renders (and nothing is requested) until the session is resolved as an admin's
 export default function SlaPoliciesPage() {
-  useRequireAuth({ allowedRoles: ['ADMIN'] });
+  const { isAuthorized } = useRequireAuth({ allowedRoles: ADMIN_ONLY });
+  return isAuthorized ? <SlaPoliciesView /> : null;
+}
+
+function SlaPoliciesView() {
   const { success, error } = useToast();
 
   const [policies, setPolicies] = useState<SlaPolicyResponse[]>([]);
@@ -86,6 +93,15 @@ export default function SlaPoliciesPage() {
         Deadlines are fixed when a ticket is created, so edits apply to new tickets only; existing deadlines and SLA
         history are never recalculated. While a policy is inactive, new tickets of that priority cannot be created.
       </Alert>
+
+      {loadError && policies.length > 0 && (
+        <RefreshErrorAlert
+          className="mb-4"
+          description="The policies below are from an earlier request and may be out of date."
+          onRetry={refresh}
+          retrying={isLoading}
+        />
+      )}
 
       {loadError && policies.length === 0 ? (
         <Card padding="none">

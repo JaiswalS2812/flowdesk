@@ -84,6 +84,35 @@ export function ErrorState({
   );
 }
 
+// ─── Refresh failed while earlier data is still shown ───────────────────────
+
+export function RefreshErrorAlert({
+  description,
+  onRetry,
+  retrying,
+  className,
+}: {
+  description: string;
+  onRetry: () => void;
+  retrying?: boolean;
+  className?: string;
+}) {
+  return (
+    <Alert
+      tone="red"
+      title="Couldn't load the latest data"
+      className={className}
+      action={
+        <Button variant="secondary" size="sm" leftIcon={<RefreshCw className="size-3.5" />} onClick={onRetry} isLoading={retrying}>
+          Retry
+        </Button>
+      }
+    >
+      {description}
+    </Alert>
+  );
+}
+
 // ─── Inline alert / callout ──────────────────────────────────────────────────
 
 const ALERT_ICON: Partial<Record<Tone, React.ReactNode>> = {

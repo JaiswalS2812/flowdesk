@@ -161,7 +161,7 @@ export default function DashboardPage() {
         <div className="space-y-5">
           {/* KPIs */}
           <section aria-label="Ticket counts" className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
-            <Kpi i={0} label="Active" hint="Open + in progress" value={s && s.open + s.inProgress} icon={<Inbox />} tone="accent" href="/tickets" loading={loading} />
+            <Kpi i={0} label="Active" hint="Open + in progress" value={s && s.open + s.inProgress} icon={<Inbox />} tone="accent" loading={loading} />
             <Kpi i={1} label="Open" hint="Waiting to be started" value={s?.open} icon={<CircleDot />} tone="blue" href="/tickets?status=OPEN" loading={loading} />
             <Kpi i={2} label="In progress" hint="Being worked on" value={s?.inProgress} icon={<Loader />} tone="amber" href="/tickets?status=IN_PROGRESS" loading={loading} />
             <Kpi i={3} label="Resolved" hint="Resolved, awaiting closure" value={s?.resolved} icon={<CheckCircle2 />} tone="green" href="/tickets?status=RESOLVED" loading={loading} />

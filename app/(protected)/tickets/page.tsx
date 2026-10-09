@@ -12,7 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { Button, buttonClasses } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/FormFields';
 import { Pagination } from '@/components/ui/Pagination';
-import { EmptyState, ErrorState, SkeletonRows } from '@/components/ui/Feedback';
+import { EmptyState, ErrorState, RefreshErrorAlert, SkeletonRows } from '@/components/ui/Feedback';
 import { Avatar } from '@/components/ui/Controls';
 import { Table, Col, TableHead, TableBody, Th, Tr, Td } from '@/components/ui/Table';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -259,6 +259,15 @@ function TicketsView() {
           )}
         </div>
       </div>
+
+      {loadError && result && (
+        <RefreshErrorAlert
+          className="mb-4"
+          description="The tickets below are from an earlier request and may not match your current filters, sort or page."
+          onRetry={refresh}
+          retrying={isLoading}
+        />
+      )}
 
       <Card padding="none" className="@container overflow-hidden">
         {isLoading && !result ? (

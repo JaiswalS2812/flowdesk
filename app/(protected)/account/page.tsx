@@ -7,27 +7,23 @@ import {
   CalendarDays,
   Check,
   Clock,
-  ImageIcon,
   Info,
   KeyRound,
   LogOut,
   ShieldAlert,
   ShieldCheck,
   Timer,
-  Upload,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { authService } from '@/services/auth.service';
 import { ApiError, Role } from '@/types';
 import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { PasswordInput, PasswordChecklist, passwordChecks } from '@/components/ui/FormFields';
 import { Avatar } from '@/components/ui/Controls';
 import { Email } from '@/components/ui/Email';
 import { Alert } from '@/components/ui/Feedback';
-import { Tooltip } from '@/components/ui/Tooltip';
 import { useToast } from '@/components/ui/Toast';
 import { RoleBadge } from '@/components/tickets/Badges';
 import { cn, formatShortDate, ROLE_DESCRIPTIONS } from '@/utils';
@@ -161,33 +157,6 @@ export default function AccountPage() {
               Need different access? Ask your FlowDesk administrator to update your role.
             </p>
           </Card>
-
-          {/* Profile media: integration-ready only; the backend has no image upload or storage yet */}
-          <Card padding="lg">
-            <CardHeader
-              title="Profile & Branding"
-              subtitle="Images that represent you across FlowDesk"
-              icon={<ImageIcon />}
-              action={<Badge tone="neutral">Not available yet</Badge>}
-              className="mb-5"
-            />
-            <div className="divide-y divide-line rounded-xl border border-line">
-              <MediaRow
-                preview={<Avatar name={user.name} seed={user.email} className="size-12 text-sm" />}
-                title="Profile picture"
-                text="Your initials are shown next to your tickets, comments and activity."
-              />
-              <MediaRow
-                preview={<ProfileCover compact className="h-12 w-24 rounded-lg border border-line" />}
-                title="Cover image"
-                text="The default FlowDesk cover is shown on your profile."
-              />
-            </div>
-            <p className="mt-4 text-xs leading-relaxed text-fg-subtle">
-              Custom pictures and covers need image storage on the server, which this FlowDesk deployment does not have
-              yet, so nothing can be uploaded here.
-            </p>
-          </Card>
         </div>
 
         {/* Right: security */}
@@ -290,44 +259,23 @@ export default function AccountPage() {
   );
 }
 
-// Default cover in the FlowDesk visual language (users cannot upload their own yet)
-function ProfileCover({ className, compact }: { className?: string; compact?: boolean }) {
+// Default cover in the FlowDesk visual language
+function ProfileCover({ className }: { className?: string }) {
   return (
     <div className={cn('relative overflow-hidden bg-gradient-to-br from-accent-soft via-surface-2 to-violet-bg', className)} aria-hidden>
       <div
         className="absolute inset-0 opacity-70"
         style={{
           backgroundImage: 'radial-gradient(circle at 1px 1px, var(--line-strong) 1px, transparent 0)',
-          backgroundSize: compact ? '8px 8px' : '18px 18px',
+          backgroundSize: '18px 18px',
           maskImage: 'linear-gradient(105deg, transparent 15%, black 70%)',
         }}
       />
-      {!compact && (
-        <svg viewBox="0 0 240 120" fill="none" className="absolute right-6 top-1/2 h-[64%] -translate-y-1/2 text-accent opacity-[0.12]">
-          <path d="M10 30h110c35 0 50 18 66 46l14 24" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
-          <path d="M10 60h220" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
-          <path d="M10 90h110c35 0 50-18 66-46" stroke="currentColor" strokeWidth="14" strokeLinecap="round" opacity="0.6" />
-        </svg>
-      )}
-    </div>
-  );
-}
-
-function MediaRow({ preview, title, text }: { preview: React.ReactNode; title: string; text: string }) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
-      <div className="shrink-0">{preview}</div>
-      <div className="min-w-[140px] flex-1">
-        <p className="text-[13px] font-medium text-fg">{title}</p>
-        <p className="text-xs leading-relaxed text-fg-muted">{text}</p>
-      </div>
-      <Tooltip content="Uploading is not available in this deployment yet">
-        <span tabIndex={0} className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <Button variant="secondary" size="sm" leftIcon={<Upload className="size-3.5" />} disabled aria-label={`Upload ${title.toLowerCase()} (not available yet)`}>
-            Upload
-          </Button>
-        </span>
-      </Tooltip>
+      <svg viewBox="0 0 240 120" fill="none" className="absolute right-6 top-1/2 h-[64%] -translate-y-1/2 text-accent opacity-[0.12]">
+        <path d="M10 30h110c35 0 50 18 66 46l14 24" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
+        <path d="M10 60h220" stroke="currentColor" strokeWidth="14" strokeLinecap="round" />
+        <path d="M10 90h110c35 0 50-18 66-46" stroke="currentColor" strokeWidth="14" strokeLinecap="round" opacity="0.6" />
+      </svg>
     </div>
   );
 }

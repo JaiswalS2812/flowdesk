@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Activity, AlertTriangle, Bot, RefreshCw, ScrollText, Search, ShieldCheck, Ticket as TicketIcon, UserCheck, UserRound, X } from 'lucide-react';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { activityService } from '@/services/activity.service';
-import { ActivitySummary, AuditLogResponse, PageResponse } from '@/types';
+import { ActivitySummary, AuditLogResponse, PageResponse, Role } from '@/types';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { PageContainer, PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/FormFields';
 import { Email } from '@/components/ui/Email';
 import { Avatar, AnimatedNumber } from '@/components/ui/Controls';
-import { EmptyState, ErrorState, SkeletonRows } from '@/components/ui/Feedback';
+import { EmptyState, ErrorState, RefreshErrorAlert, SkeletonRows } from '@/components/ui/Feedback';
 import { Pagination } from '@/components/ui/Pagination';
 import { Table, Col, TableHead, TableBody, Th, Tr, Td } from '@/components/ui/Table';
 import { AUDIT_ACTIONS, auditAction, cn, formatDate, formatRelative, formatTime, Tone, TONE_SOFT } from '@/utils';
@@ -46,9 +46,15 @@ function byDay(logs: AuditLogResponse[]) {
   return groups;
 }
 
-export default function ActivityPage() {
-  useRequireAuth({ allowedRoles: ['ADMIN'] });
+const ADMIN_ONLY: Role[] = ['ADMIN'];
 
+// Nothing renders (and nothing is requested) until the session is resolved as an admin's
+export default function ActivityPage() {
+  const { isAuthorized } = useRequireAuth({ allowedRoles: ADMIN_ONLY });
+  return isAuthorized ? <ActivityView /> : null;
+}
+
+function ActivityView() {
   const [result, setResult] = useState<PageResponse<AuditLogResponse> | null>(null);
   const [metrics, setMetrics] = useState<ActivitySummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -175,6 +181,15 @@ export default function ActivityPage() {
           </Button>
         )}
       </div>
+
+      {loadError && result && (
+        <RefreshErrorAlert
+          className="mb-4"
+          description="The events and totals below are from an earlier request and may not match your current search, filter or page."
+          onRetry={refresh}
+          retrying={isLoading}
+        />
+      )}
 
       {/* The layout responds to the card's own width, so collapsing the sidebar gives the table room */}
       <Card padding="none" className="@container overflow-hidden">
