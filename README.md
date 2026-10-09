@@ -95,6 +95,31 @@ deactivate a policy.
 The same dashboard in the dark theme. Light, Dark, Warm and System themes are available from
 the top bar.
 
+### Warm theme & FlowDesk Assistant
+
+The Warm theme is a low-glare option for long sessions, with paper-like surfaces and copper
+accents. These screenshots also show the FlowDesk Assistant open: a rule-based helper (it
+follows fixed rules and does not use AI) that answers from the tickets your role can see and
+from the Help Center.
+
+#### Account with the Assistant
+
+![Account page in the Warm theme with the profile summary and role permissions, and the FlowDesk Assistant open showing its welcome message and suggested questions](docs/screenshots/warm-account.png)
+
+The Account page alongside the Assistant's welcome screen and suggested questions.
+
+#### Dashboard with the Assistant
+
+![Dashboard in the Warm theme with ticket counts and breakdowns, and the FlowDesk Assistant open showing an overview of ticket counts by status, at-risk and breached tickets](docs/screenshots/warm-dashboard-assistant.png)
+
+Asking for an overview returns the same ticket counts the dashboard is built on.
+
+#### Tickets with the Assistant
+
+![Tickets list in the Warm theme with the FlowDesk Assistant open, listing the two tickets at risk of breaching their SLA with their status, priority and breach badges](docs/screenshots/warm-tickets-assistant.png)
+
+Asking about SLA risk lists the affected tickets, each linking to its detail page.
+
 ### Every screen at a glance
 
 | Screen | What you'll find |
